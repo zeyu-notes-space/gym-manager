@@ -1,43 +1,58 @@
-let routes = [];
+let _routes = [];
+let _currentCleanup = null;
 
-/**
- * Initialize the hash-based router.
- * @param {Array<[string, Function]>} routeList - Array of [pattern, handler] pairs
- */
-export function initRouter(routeList) {
-  routes = routeList;
-  
+export function initRouter(routes) {
+  _routes = routes;
+
   function resolve() {
-    const hash = window.location.hash.slice(1) || '/';
-    for (const [pattern, handler] of routes) {
+    const hash = location.hash.replace(/^#/, '') || '/';
+
+    if (_currentCleanup) {
+      _currentCleanup();
+      _currentCleanup = null;
+    }
+
+    const app = document.getElementById('app');
+
+    for (const [pattern, handler] of _routes) {
       const params = matchRoute(pattern, hash);
-      if (params !== null) {
-        handler(params);
+      if (params) {
+        try {
+          const result = handler(params);
+          if (result && typeof result.then === 'function') {
+            result.catch((e) => {
+              console.error('Route handler error:', e);
+              app.innerHTML = `<div class="error-state"><h2>页面加载失败</h2><p>${e.message}</p><button class="btn btn-primary" onclick="location.reload()">重试</button></div>`;
+            });
+          }
+        } catch (e) {
+          console.error('Route handler error:', e);
+          app.innerHTML = `<div class="error-state"><h2>页面加载失败</h2><p>${e.message}</p><button class="btn btn-primary" onclick="location.reload()">重试</button></div>`;
+        }
         return;
       }
     }
-    // Fallback: try the home route
-    const home = routes.find(([p]) => p === '/');
-    if (home) home[1]({});
+
+    // 404
+    app.innerHTML = `<div class="error-state"><h2>页面未找到</h2><button class="btn btn-primary" onclick="navigate('/')">返回首页</button></div>`;
   }
-  
+
   window.addEventListener('hashchange', resolve);
+
+  // Resolve initial route
   resolve();
 }
 
-/**
- * Navigate to a path (updates window.location.hash).
- */
-export function navigate(path) {
-  window.location.hash = path;
+export function setCleanup(fn) {
+  _currentCleanup = fn;
 }
 
 function matchRoute(pattern, hash) {
   const patternParts = pattern.split('/');
   const hashParts = hash.split('/');
-  
+
   if (patternParts.length !== hashParts.length) return null;
-  
+
   const params = {};
   for (let i = 0; i < patternParts.length; i++) {
     if (patternParts[i].startsWith(':')) {
@@ -47,4 +62,12 @@ function matchRoute(pattern, hash) {
     }
   }
   return params;
+}
+
+export function navigate(path) {
+  location.hash = '#' + path;
+}
+
+export function getCurrentPath() {
+  return location.hash.replace(/^#/, '') || '/';
 }

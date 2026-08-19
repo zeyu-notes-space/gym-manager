@@ -1,143 +1,81 @@
 import {
-  getAllMembers,
-  getTodayCheckinCount,
   getMemberCount,
-  searchMembers,
-  seedDemoData,
+  getMemberCountByMembership,
+  getTodayCheckinCount,
+  getCourseCount,
+  getActivityCount,
 } from '../db.js';
 import { navigate } from '../router.js';
-import { getDaysRemaining, getCardTypeLabel, escapeHtml } from '../utils.js';
+import { APP_NAME } from '../config.js';
 
 export async function renderHome() {
   const app = document.getElementById('app');
-  const totalCount = await getMemberCount();
-
-  // Empty state
-  if (totalCount === 0) {
-    app.innerHTML = `
-      <div class="home-view">
-        <div class="top-bar glass">
-          <h1>健身房会员</h1>
-        </div>
-        <div class="empty-state-full">
-          <div class="empty-icon">
-            <svg width="64" height="64" viewBox="0 0 100 100">
-              <rect x="25" y="38" width="50" height="24" rx="6" fill="#2dd4bf" opacity="0.9"/>
-              <rect x="18" y="31" width="10" height="38" rx="5" fill="#2dd4bf" opacity="0.7"/>
-              <rect x="72" y="31" width="10" height="38" rx="5" fill="#2dd4bf" opacity="0.7"/>
-            </svg>
-          </div>
-          <h2>还没有会员</h2>
-          <p>添加第一个会员开始使用</p>
-          <button class="btn-primary" id="btn-first-member">+ 新增会员</button>
-          <button class="btn-secondary" id="btn-demo-data">加载演示数据</button>
-        </div>
-      </div>
-    `;
-
-    document.getElementById('btn-first-member').onclick = () => navigate('/member/new');
-    document.getElementById('btn-demo-data').onclick = async () => {
-      await seedDemoData();
-      renderHome();
-    };
-    return;
-  }
-
-  // Normal view
-  const members = await getAllMembers();
-  const todayCount = await getTodayCheckinCount();
+  const memberCount = await getMemberCountByMembership();
+  const todayCheckins = await getTodayCheckinCount();
+  const courseCount = await getCourseCount();
+  const activityCount = await getActivityCount();
 
   app.innerHTML = `
-    <div class="home-view">
-      <div class="top-bar glass">
-        <h1>健身房会员</h1>
-      </div>
-
-      <div class="search-box">
-        <span class="search-icon">🔍</span>
-        <input type="search" id="search-input" placeholder="搜索姓名 / 手机号" autocomplete="off">
-      </div>
-
-      <div class="stats-row">
-        <div class="stat-item">
-          <span class="stat-value">${todayCount}</span>
-          <span class="stat-label">今日签到</span>
+    <div class="home-dashboard">
+      <div class="home-header">
+        <div>
+          <h1>${APP_NAME}</h1>
+          <div class="subtitle">本地运营台账</div>
         </div>
-        <div class="stat-item">
-          <span class="stat-value">${totalCount}</span>
-          <span class="stat-label">会员总数</span>
+        <button class="btn-icon" id="btn-settings" title="设置">⚙</button>
+      </div>
+
+      <div class="module-list">
+        <div class="module-entry" id="module-members">
+          <div class="module-entry-header">
+            <div class="module-icon members">👥</div>
+            <div class="module-info">
+              <h3>会员管理</h3>
+              <div class="module-stats">${memberCount} 会员 · ${todayCheckins > 0 ? `今日 ${todayCheckins} 签到` : '暂无今日签到'}</div>
+            </div>
+            <span class="module-arrow">›</span>
+          </div>
+          <div class="module-status">
+            <span>次卡 · 月卡 · 年卡</span>
+            <span class="stat-number">${memberCount} 人</span>
+          </div>
         </div>
-      </div>
 
-      <div class="member-list" id="member-list">
-        ${members.map(renderMemberItem).join('')}
-      </div>
+        <div class="module-entry" id="module-training">
+          <div class="module-entry-header">
+            <div class="module-icon training">🏋️</div>
+            <div class="module-info">
+              <h3>私教管理</h3>
+              <div class="module-stats">${courseCount} 课包 · 消课记录</div>
+            </div>
+            <span class="module-arrow">›</span>
+          </div>
+          <div class="module-status">
+            <span>剩余课时 · 消课</span>
+            <span class="stat-number">${courseCount} 个课包</span>
+          </div>
+        </div>
 
-      <div class="fab" id="fab-add">
-        <span>+</span>
+        <div class="module-entry" id="module-activities">
+          <div class="module-entry-header">
+            <div class="module-icon activities">📋</div>
+            <div class="module-info">
+              <h3>活动管理</h3>
+              <div class="module-stats">${activityCount} 活动 · 报名参与</div>
+            </div>
+            <span class="module-arrow">›</span>
+          </div>
+          <div class="module-status">
+            <span>活动报名 · 参与人数</span>
+            <span class="stat-number">${activityCount} 个活动</span>
+          </div>
+        </div>
       </div>
     </div>
   `;
 
-  // Bind events
-  document.getElementById('search-input').oninput = async (e) => {
-    const query = e.target.value.trim();
-    const results = query ? await searchMembers(query) : await getAllMembers();
-    const list = document.getElementById('member-list');
-    if (results.length === 0) {
-      list.innerHTML = `
-        <div class="empty-state">
-          <p>没有找到会员</p>
-          <button class="btn-primary" id="search-add-btn">+ 新增会员</button>
-        </div>
-      `;
-      document.getElementById('search-add-btn').onclick = () => navigate('/member/new');
-    } else {
-      list.innerHTML = results.map(renderMemberItem).join('');
-      bindMemberItemClicks();
-    }
-  };
-
-  document.getElementById('fab-add').onclick = () => navigate('/member/new');
-  bindMemberItemClicks();
-}
-
-function renderMemberItem(member) {
-  let statusText = '';
-  let statusClass = '';
-
-  if (member.cardType === 'count') {
-    if (member.remainingCount <= 0) {
-      statusClass = 'status-expired';
-      statusText = '次卡 · 已用完';
-    } else if (member.remainingCount <= 3) {
-      statusClass = 'status-warning';
-      statusText = `次卡 · 剩余 ${member.remainingCount} 次`;
-    } else {
-      statusText = `次卡 · 剩余 ${member.remainingCount} 次`;
-    }
-  } else {
-    const daysLeft = getDaysRemaining(member.expiryDate);
-    const label = getCardTypeLabel(member.cardType);
-    if (daysLeft < 0) {
-      statusClass = 'status-expired';
-      statusText = `${label} · 已过期`;
-    } else if (daysLeft <= 7) {
-      statusClass = 'status-warning';
-      statusText = `${label} · 剩余 ${daysLeft} 天`;
-    } else {
-      statusText = `${label} · 剩余 ${daysLeft} 天`;
-    }
-  }
-
-  return `<div class="member-item" data-id="${escapeHtml(member.id)}">
-    <div class="member-name">${escapeHtml(member.name)}</div>
-    <div class="member-status ${statusClass}">${statusText}</div>
-  </div>`;
-}
-
-function bindMemberItemClicks() {
-  document.querySelectorAll('.member-item').forEach((el) => {
-    el.onclick = () => navigate('/member/' + encodeURIComponent(el.dataset.id));
-  });
+  document.getElementById('btn-settings').onclick = () => navigate('/settings');
+  document.getElementById('module-members').onclick = () => navigate('/members');
+  document.getElementById('module-training').onclick = () => navigate('/training');
+  document.getElementById('module-activities').onclick = () => navigate('/activities');
 }

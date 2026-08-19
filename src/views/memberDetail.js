@@ -10,6 +10,7 @@ import {
   generateId,
   generateCheckinId,
   generateAdjId,
+  getCoursesByMember,
 } from '../db.js';
 import { navigate } from '../router.js';
 import {
@@ -17,6 +18,9 @@ import {
   getDaysRemaining as calcDaysRemaining,
   getCardTypeLabel,
   escapeHtml,
+  showToast,
+  showConfirm,
+  promptInput,
 } from '../utils.js';
 
 let _checkinLock = false;
@@ -24,112 +28,150 @@ let _checkinLock = false;
 export async function renderMemberDetail(memberId) {
   const member = await getMember(memberId);
   if (!member) {
-    navigate('/');
+    navigate('/members');
     return;
   }
 
   const checkins = await getCheckinsByMember(memberId);
   checkins.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-  const app = document.getElementById('app');
-  app.innerHTML = buildHTML(member, checkins);
+  const courses = await getCoursesByMember(memberId);
+  const hasTraining = courses.length > 0;
 
-  // Bind events
-  document.getElementById('btn-back').onclick = () => navigate('/');
-  document.getElementById('btn-checkin').onclick = () => handleCheckin(member);
+  const app = document.getElementById('app');
+  app.innerHTML = buildHTML(member, checkins, courses, hasTraining);
+
+  document.getElementById('btn-back').onclick = () => navigate('/members');
+  
+  const checkinBtn = document.getElementById('btn-checkin');
+  if (checkinBtn) checkinBtn.onclick = () => handleCheckin(member);
 
   const undoBtn = document.getElementById('btn-undo');
   if (undoBtn) undoBtn.onclick = () => handleUndo(member);
 
-  document.getElementById('btn-renew').onclick = () => showRenewDialog(member);
-  document.getElementById('btn-edit').onclick = () =>
-    navigate('/member/' + encodeURIComponent(memberId) + '/edit');
-  document.getElementById('btn-delete').onclick = () => handleDelete(member);
+  const renewBtn = document.getElementById('btn-renew');
+  if (renewBtn) renewBtn.onclick = () => showRenewDialog(member);
+
+  const editBtn = document.getElementById('btn-edit');
+  if (editBtn) editBtn.onclick = () => navigate('/members/' + encodeURIComponent(memberId) + '/edit');
+
+  const deleteBtn = document.getElementById('btn-delete');
+  if (deleteBtn) deleteBtn.onclick = () => handleDelete(member);
+
+  const trainingLink = document.getElementById('btn-view-training');
+  if (trainingLink) trainingLink.onclick = () => navigate('/training?member=' + encodeURIComponent(memberId));
 }
 
-function buildHTML(member, checkins) {
+function buildHTML(member, checkins, courses, hasTraining) {
   const name = escapeHtml(member.name);
   const typeLabel = getCardTypeLabel(member.cardType);
+  const cardNo = member.cardNo ? escapeHtml(member.cardNo) : '';
+  const notes = member.notes ? escapeHtml(member.notes) : '';
 
-  let mainHTML = '';
-  let needsConfirm = false;
+  let mainValue = '';
+  let mainLabel = '';
+  let valueClass = '';
+  let extraHTML = '';
 
   if (member.cardType === 'count') {
     const rem = member.remainingCount;
     const total = member.totalCount;
-    const used = total - rem;
+    const used = total > 0 ? total - rem : 0;
     const pct = total > 0 ? (used / total) * 100 : 0;
-    const isZero = rem <= 0;
-    if (isZero) needsConfirm = true;
-
-    mainHTML = `
-      <div class="detail-main">
-        <div class="card-badge ${isZero ? 'expired-badge' : ''}">次卡</div>
-        <div class="big-number ${isZero ? 'zero' : ''}">
-          ${isZero ? '0' : rem}
-          <span class="big-number-label">${isZero ? '次数已用完' : '剩余次数'}</span>
-        </div>
+    mainValue = String(rem);
+    mainLabel = rem > 0 ? '剩余次数' : '次数已用完';
+    valueClass = rem <= 0 ? 'zero' : '';
+    if (total > 0) {
+      extraHTML = `
         <div class="progress-section">
-          <div class="progress-bar">
-            <div class="progress-fill" style="width:${pct}%"></div>
-          </div>
-          <span class="progress-text">已使用 ${used} / 总计 ${total}</span>
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+          <div class="progress-text">已使用 ${used} / 总计 ${total}</div>
         </div>
-      </div>
-    `;
+      `;
+    }
+  } else if (member.cardType === 'month' || member.cardType === 'year') {
+    const days = calcDaysRemaining(member.expiryDate);
+    if (days === null) {
+      mainValue = '—';
+      mainLabel = '无期限';
+    } else if (days >= 0) {
+      mainValue = `${days}`;
+      mainLabel = `剩余天数（至 ${member.expiryDate}）`;
+    } else {
+      mainValue = '已过期';
+      mainLabel = `于 ${member.expiryDate} 到期`;
+      valueClass = 'expired';
+    }
   } else {
-    const daysLeft = calcDaysRemaining(member.expiryDate);
-    const expired = daysLeft < 0;
-    if (expired) needsConfirm = true;
-
-    mainHTML = `
-      <div class="detail-main">
-        <div class="card-badge ${expired ? 'expired-badge' : ''}">${typeLabel}</div>
-        <div class="big-number ${expired ? 'zero' : ''}">
-          ${expired ? '已过期' : `${daysLeft}<span class="big-number-unit">天</span>`}
-          <span class="big-number-label">${expired ? '' : '剩余'}</span>
-        </div>
-        <div class="date-range">
-          ${member.startDate || '—'} ～ ${member.expiryDate || '—'}
-        </div>
-      </div>
-    `;
+    mainValue = '—';
+    mainLabel = '仅私教';
+    valueClass = '';
   }
 
   const historyHTML = checkins.length > 0
     ? checkins.map(c => `
-      <div class="checkin-item">
-        <span>${formatDateTime(c.timestamp)}</span>
-        ${c.forced ? '<span class="forced-tag">已过期签到</span>' : ''}
-      </div>`).join('')
-    : '<div class="empty-state-sm">暂无签到记录</div>';
+      <div class="history-item">
+        <span class="history-time">${formatDateTime(c.timestamp)}</span>
+        ${c.forced ? '<span class="history-tag">已过期</span>' : ''}
+      </div>
+    `).join('')
+    : '<div class="section-empty">暂无签到记录</div>';
 
   return `
     <div class="detail-view">
-      <div class="top-bar glass">
-        <button class="btn-icon" id="btn-back">←</button>
+      <div class="top-bar">
+        <button class="btn-icon" id="btn-back">‹</button>
         <h1>${name}</h1>
-        <div style="width:36px"></div>
+        <button class="btn-icon" id="btn-edit">✎</button>
       </div>
 
-      ${mainHTML}
+      <div class="detail-body">
+        <div class="detail-card">
+          <div class="big-value ${valueClass}">${mainValue}</div>
+          <div class="big-value-label">${mainLabel}</div>
+          ${extraHTML}
+        </div>
+
+        <div class="detail-card">
+          <h3>基本信息</h3>
+          <div class="info-row"><span class="label">姓名</span><span class="value">${name}</span></div>
+          ${member.phone ? `<div class="info-row"><span class="label">手机号</span><span class="value">${escapeHtml(member.phone)}</span></div>` : ''}
+          ${cardNo ? `<div class="info-row"><span class="label">会员卡号</span><span class="value">${cardNo}</span></div>` : ''}
+          ${typeLabel ? `<div class="info-row"><span class="label">卡类型</span><span class="value">${typeLabel}</span></div>` : ''}
+          ${member.startDate ? `<div class="info-row"><span class="label">有效期</span><span class="value">${escapeHtml(member.startDate)} → ${escapeHtml(member.expiryDate || '—')}</span></div>` : ''}
+          ${notes ? `<div class="info-row"><span class="label">备注</span><span class="value">${notes}</span></div>` : ''}
+        </div>
+
+        ${hasTraining ? `
+        <div class="detail-card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <h3>私教课包</h3>
+            <span class="link-accent" id="btn-view-training">查看 ${courses.length} 个课包 ›</span>
+          </div>
+          ${courses.slice(0, 2).map(c => `
+            <div class="info-row">
+              <span class="label">${escapeHtml(c.packageName)} · ${escapeHtml(c.coachName || '')}</span>
+              <span class="value">${c.remainingLessons}/${c.totalLessons} 节</span>
+            </div>
+          `).join('')}
+        </div>
+        ` : ''}
+
+        <div class="detail-card">
+          <h3>签到记录</h3>
+          <div class="history-list">${historyHTML}</div>
+        </div>
+      </div>
 
       <div class="detail-actions">
-        <button class="btn-checkin" id="btn-checkin" ${needsConfirm ? 'data-warn="true"' : ''}>
-          确认签到
-        </button>
-        ${checkins.length > 0 ? '<button class="btn-undo" id="btn-undo">撤销最近一次签到</button>' : ''}
-      </div>
-
-      <div class="detail-section">
-        <h3 class="section-title">最近签到</h3>
-        <div class="checkin-list">${historyHTML}</div>
-      </div>
-
-      <div class="detail-footer">
-        <button class="btn-secondary" id="btn-renew">续卡 / 充值</button>
-        <button class="btn-secondary" id="btn-edit">编辑</button>
-        <button class="btn-danger" id="btn-delete">删除</button>
+        ${member.cardType && member.membershipEnabled !== false ? `
+        <button class="btn btn-primary btn-block" id="btn-checkin">确认签到</button>
+        ` : ''}
+        ${checkins.length > 0 ? `<button class="btn btn-secondary btn-block" id="btn-undo">撤销最近签到</button>` : ''}
+        <div class="btn-group">
+          <button class="btn btn-secondary" id="btn-renew">续卡</button>
+          <button class="btn btn-danger" id="btn-delete">删除</button>
+        </div>
       </div>
     </div>
   `;
@@ -138,22 +180,21 @@ function buildHTML(member, checkins) {
 async function handleCheckin(member) {
   if (_checkinLock) return;
   _checkinLock = true;
-
   const btn = document.getElementById('btn-checkin');
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
 
   try {
     let forced = false;
 
     if (member.cardType === 'count' && member.remainingCount <= 0) {
       const ok = await showConfirm('该会员次数已用完，仍然记录本次签到？');
-      if (!ok) { btn.disabled = false; _checkinLock = false; return; }
+      if (!ok) { if (btn) btn.disabled = false; _checkinLock = false; return; }
       forced = true;
-    } else if (member.cardType !== 'count') {
+    } else if (member.cardType === 'month' || member.cardType === 'year') {
       const daysLeft = calcDaysRemaining(member.expiryDate);
-      if (daysLeft < 0) {
+      if (daysLeft !== null && daysLeft < 0) {
         const ok = await showConfirm('该会员当前已过期，仍然记录本次签到？');
-        if (!ok) { btn.disabled = false; _checkinLock = false; return; }
+        if (!ok) { if (btn) btn.disabled = false; _checkinLock = false; return; }
         forced = true;
       }
     }
@@ -174,7 +215,7 @@ async function handleCheckin(member) {
       await updateMember(member);
     }
 
-    showToast('✓ 签到成功');
+    showToast('签到成功');
     renderMemberDetail(member.id);
   } finally {
     _checkinLock = false;
@@ -207,8 +248,99 @@ async function handleUndo(member) {
     timestamp: new Date().toISOString(),
   });
 
-  showToast('✓ 已撤销');
+  showToast('已撤销');
   renderMemberDetail(member.id);
+}
+
+async function showRenewDialog(member) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-dialog">
+      <h4>续卡 / 充值</h4>
+      <div class="form-group">
+        <label>卡类型</label>
+        <div class="card-type-selector">
+          <button class="type-btn selected" data-type="count">次卡</button>
+          <button class="type-btn" data-type="month">月卡</button>
+          <button class="type-btn" data-type="year">年卡</button>
+        </div>
+      </div>
+      <div class="form-group" id="renew-count-group">
+        <label>增加次数</label>
+        <input type="number" class="input" id="renew-count" value="10" min="1" />
+      </div>
+      <div class="form-group" id="renew-date-group" style="display:none">
+        <label>有效期开始</label>
+        <input type="date" class="input" id="renew-start" value="${new Date().toISOString().split('T')[0]}" />
+      </div>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="renew-cancel">取消</button>
+        <button class="btn btn-primary" id="renew-confirm">确认</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('show'));
+
+  let selectedType = 'count';
+  const countGroup = overlay.querySelector('#renew-count-group');
+  const dateGroup = overlay.querySelector('#renew-date-group');
+
+  overlay.querySelectorAll('.type-btn').forEach(btn => {
+    btn.onclick = () => {
+      overlay.querySelectorAll('.type-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedType = btn.dataset.type;
+      countGroup.style.display = selectedType === 'count' ? '' : 'none';
+      dateGroup.style.display = selectedType === 'count' ? 'none' : '';
+    };
+  });
+
+  overlay.querySelector('#renew-cancel').onclick = () => {
+    overlay.classList.remove('show');
+    setTimeout(() => overlay.remove(), 200);
+  };
+
+  overlay.querySelector('#renew-confirm').onclick = async () => {
+    const cardType = selectedType;
+
+    if (cardType === 'count') {
+      const addCount = parseInt(overlay.querySelector('#renew-count').value) || 10;
+      member.cardType = 'count';
+      member.totalCount = (member.totalCount || 0) + addCount;
+      member.remainingCount = (member.remainingCount || 0) + addCount;
+      member.startDate = null;
+      member.expiryDate = null;
+    } else {
+      const startDate = overlay.querySelector('#renew-start').value;
+      if (!startDate) { showToast('请选择开始日期'); return; }
+      member.cardType = cardType;
+      member.totalCount = null;
+      member.remainingCount = null;
+      member.startDate = startDate;
+      if (cardType === 'month') {
+        const end = new Date(startDate + 'T00:00:00');
+        end.setMonth(end.getMonth() + 1);
+        end.setDate(end.getDate() - 1);
+        member.expiryDate = end.toISOString().split('T')[0];
+      } else {
+        const end = new Date(startDate + 'T00:00:00');
+        end.setFullYear(end.getFullYear() + 1);
+        end.setDate(end.getDate() - 1);
+        member.expiryDate = end.toISOString().split('T')[0];
+      }
+    }
+
+    member.membershipEnabled = true;
+    member.updatedAt = new Date().toISOString();
+    await updateMember(member);
+
+    overlay.classList.remove('show');
+    setTimeout(() => overlay.remove(), 200);
+    showToast('续卡成功');
+    renderMemberDetail(member.id);
+  };
 }
 
 async function handleDelete(member) {
@@ -222,145 +354,6 @@ async function handleDelete(member) {
     await deleteCheckin(c.id);
   }
   await deleteMember(member.id);
-  navigate('/');
-}
-
-// ─── Renew Dialog ───
-
-function showRenewDialog(member) {
-  const overlay = document.createElement('div');
-  overlay.className = 'confirm-overlay';
-
-  let bodyHTML = '';
-
-  if (member.cardType === 'count') {
-    bodyHTML = `
-      <div class="renew-body">
-        <p>当前剩余：<strong>${member.remainingCount}</strong> 次</p>
-        <div class="form-group">
-          <label>增加次数</label>
-          <input type="number" id="renew-count-input" min="1" value="10">
-        </div>
-        <div class="renew-result" id="renew-result">完成后剩余：${member.remainingCount + 10} 次</div>
-      </div>
-    `;
-  } else {
-    bodyHTML = `
-      <div class="renew-body">
-        <p>当前到期：<strong>${member.expiryDate || '—'}</strong></p>
-        <div class="form-group">
-          <label>新的到期日期</label>
-          <input type="date" id="renew-date-input" value="${member.expiryDate || ''}">
-        </div>
-      </div>
-    `;
-  }
-
-  overlay.innerHTML = `
-    <div class="confirm-dialog">
-      <h2 style="margin-bottom:16px;font-size:18px;">${member.cardType === 'count' ? '充值' : '续期'}</h2>
-      ${bodyHTML}
-      <div class="confirm-actions" style="margin-top:20px;">
-        <button class="btn-secondary" id="renew-cancel">取消</button>
-        <button class="btn-primary" id="renew-confirm">${member.cardType === 'count' ? '确认充值' : '确认续期'}</button>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(overlay);
-
-  // Live preview for count
-  if (member.cardType === 'count') {
-    document.getElementById('renew-count-input').oninput = () => {
-      const val = parseInt(document.getElementById('renew-count-input').value) || 0;
-      document.getElementById('renew-result').textContent =
-        '完成后剩余：' + (member.remainingCount + val) + ' 次';
-    };
-  }
-
-  document.getElementById('renew-cancel').onclick = () => overlay.remove();
-  document.getElementById('renew-confirm').onclick = async () => {
-    const now = new Date().toISOString();
-
-    if (member.cardType === 'count') {
-      const addVal = parseInt(document.getElementById('renew-count-input').value) || 0;
-      if (addVal <= 0) {
-        showToast('请输入有效的次数');
-        return;
-      }
-      member.totalCount += addVal;
-      member.remainingCount += addVal;
-      member.updatedAt = now;
-      await updateMember(member);
-      await addAdjustment({
-        id: generateAdjId(),
-        memberId: member.id,
-        type: 'recharge',
-        description: '充值 ' + addVal + ' 次',
-        timestamp: now,
-      });
-    } else {
-      const newExpiry = document.getElementById('renew-date-input').value;
-      if (!newExpiry) {
-        showToast('请选择新的到期日期');
-        return;
-      }
-      member.expiryDate = newExpiry;
-      member.updatedAt = now;
-      await updateMember(member);
-      await addAdjustment({
-        id: generateAdjId(),
-        memberId: member.id,
-        type: 'extend',
-        description: '续期至 ' + newExpiry,
-        timestamp: now,
-      });
-    }
-
-    overlay.remove();
-    showToast('✓ 已更新');
-    renderMemberDetail(member.id);
-  };
-}
-
-// ─── Confirm Dialog ───
-
-function showConfirm(message) {
-  return new Promise((resolve) => {
-    const overlay = document.createElement('div');
-    overlay.className = 'confirm-overlay';
-    overlay.innerHTML = `
-      <div class="confirm-dialog">
-        <p>${escapeHtml(message)}</p>
-        <div class="confirm-actions">
-          <button class="btn-secondary" id="confirm-cancel">取消</button>
-          <button class="btn-primary" id="confirm-ok">确认</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-
-    document.getElementById('confirm-cancel').onclick = () => {
-      overlay.remove();
-      resolve(false);
-    };
-    document.getElementById('confirm-ok').onclick = () => {
-      overlay.remove();
-      resolve(true);
-    };
-  });
-}
-
-// ─── Toast ───
-
-function showToast(msg) {
-  const el = document.getElementById('toast');
-  if (!el) return;
-  if (window._detailToastTimer) clearTimeout(window._detailToastTimer);
-  el.textContent = msg;
-  el.classList.add('show');
-  window._detailToastTimer = setTimeout(() => {
-    el.classList.remove('show');
-    window._detailToastTimer = null;
-  }, 2000);
+  showToast('已删除');
+  navigate('/members');
 }

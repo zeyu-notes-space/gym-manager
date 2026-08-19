@@ -1,13 +1,13 @@
 {
-  "name": "健身房会员管理",
-  "short_name": "会员管理",
-  "description": "社区健身房会员管理工具",
+  "name": "OXY FITNESS",
+  "short_name": "OXY",
+  "description": "社区健身房本地运营台账",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#0c0e14",
-  "theme_color": "#0c0e14",
+  "background_color": "#0e1016",
+  "theme_color": "#83CE4A",
   "orientation": "portrait",
-  "categories": ["lifestyle", "utilities"],
+  "categories": ["lifestyle", "fitness", "utilities"],
   "icons": [
     {
       "src": "icons/icon.svg",

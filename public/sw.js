@@ -1,7 +1,15 @@
-const CACHE_NAME = 'gym-cache-v1';
+const CACHE_NAME = 'gym-cache-v2';
+const PRECACHE_URLS = [
+  './',
+  './index.html',
+  './manifest.webmanifest',
+];
 
-self.addEventListener('install', () => {
+self.addEventListener('install', (e) => {
   self.skipWaiting();
+  e.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -18,18 +26,35 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
 
-  e.respondWith(
-    fetch(e.request)
-      .then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          const url = new URL(e.request.url);
-          if (url.origin === self.location.origin) {
-            cache.put(e.request, clone);
-          }
-        });
-        return response;
-      })
-      .catch(() => caches.match(e.request))
-  );
+  // HTML navigation: network-first
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+          return response;
+        })
+        .catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Same-origin assets: network-first
+  const url = new URL(e.request.url);
+  if (url.origin === self.location.origin) {
+    e.respondWith(
+      fetch(e.request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+          return response;
+        })
+        .catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Cross-origin: network only, no cache
+  e.respondWith(fetch(e.request));
 });
