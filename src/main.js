@@ -4,6 +4,11 @@ import { initRouter } from './router.js';
 import { renderHome } from './views/home.js';
 import { renderMemberDetail } from './views/memberDetail.js';
 import { renderMemberForm } from './views/memberForm.js';
+import { testPersistence, diagnoseReport } from './debug.js';
+
+// Expose diagnostics for DevTools
+window.__testPersistence = testPersistence;
+window.__diagnoseReport = diagnoseReport;
 
 async function init() {
   await getDB();
