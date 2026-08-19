@@ -9,13 +9,21 @@ export async function getDB() {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = (e) => {
       const db = e.target.result;
+      const tx = e.target.transaction;
 
       if (!db.objectStoreNames.contains('members')) {
         const s = db.createObjectStore('members', { keyPath: 'id' });
         s.createIndex('name', 'name', { unique: false });
         s.createIndex('phone', 'phone', { unique: false });
         s.createIndex('cardNo', 'cardNo', { unique: false });
+      } else if (e.oldVersion < 2) {
+        // v1→v2: add cardNo index
+        const store = tx.objectStore('members');
+        if (!store.indexNames.contains('cardNo')) {
+          store.createIndex('cardNo', 'cardNo', { unique: false });
+        }
       }
+
       if (!db.objectStoreNames.contains('checkins')) {
         const s = db.createObjectStore('checkins', { keyPath: 'id' });
         s.createIndex('memberId', 'memberId', { unique: false });
@@ -138,6 +146,14 @@ export async function getAllMembersWithMembership() {
   return all.filter(m => m.membershipEnabled !== false);
 }
 
+function getLocalDateStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // ═══ Checkins ═══
 
 export async function getAllCheckins() {
@@ -182,8 +198,13 @@ export async function getLatestCheckin(memberId) {
 
 export async function getTodayCheckinCount() {
   const all = await getAllCheckins();
-  const today = new Date().toISOString().split('T')[0];
-  return all.filter((c) => c.timestamp && c.timestamp.startsWith(today)).length;
+  const now = new Date();
+  const localToday = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  return all.filter((c) => {
+    if (!c.timestamp) return false;
+    const d = new Date(c.timestamp);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` === localToday;
+  }).length;
 }
 
 // ═══ Private Courses ═══
@@ -368,7 +389,7 @@ export async function getActivityCount() {
 
 export async function getUpcomingActivities() {
   const all = await getAllActivities();
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateStr();
   return all
     .filter(a => a.startDate >= today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate) || (a.startTime || '').localeCompare(b.startTime || ''));

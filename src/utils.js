@@ -52,14 +52,22 @@ export function getDefaultExpiry(startDate, cardType) {
     const end = new Date(start);
     end.setMonth(end.getMonth() + 1);
     end.setDate(end.getDate() - 1);
-    return end.toISOString().split('T')[0];
+    return getLocalDateString(end);
   } else if (cardType === 'year') {
     const end = new Date(start);
     end.setFullYear(end.getFullYear() + 1);
     end.setDate(end.getDate() - 1);
-    return end.toISOString().split('T')[0];
+    return getLocalDateString(end);
   }
   return '';
+}
+
+export function getLocalDateString(date) {
+  if (!date) date = new Date();
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 export function escapeHtml(text) {

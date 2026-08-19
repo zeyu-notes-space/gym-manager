@@ -6,7 +6,7 @@ import {
   generateCourseId,
 } from '../db.js';
 import { navigate } from '../router.js';
-import { escapeHtml, showToast } from '../utils.js';
+import { escapeHtml, showToast, getLocalDateString } from '../utils.js';
 
 export async function renderPrivateForm(courseId) {
   const isEdit = !!courseId;
@@ -21,7 +21,7 @@ export async function renderPrivateForm(courseId) {
     coachName: course ? (course.coachName || '') : '',
     totalLessons: course ? (course.totalLessons || 20) : 20,
     remainingLessons: course ? (course.remainingLessons || course.totalLessons || 20) : 20,
-    startDate: course ? (course.startDate || '') : new Date().toISOString().split('T')[0],
+    startDate: course ? (course.startDate || '') : getLocalDateString(),
     notes: course ? (course.notes || '') : '',
   };
 
@@ -83,7 +83,7 @@ export async function renderPrivateForm(courseId) {
       packageName: app.querySelector('#field-packageName').value.trim() || '私教课',
       coachName: app.querySelector('#field-coachName').value.trim(),
       totalLessons: parseInt(app.querySelector('#field-totalLessons').value) || 20,
-      startDate: app.querySelector('#field-startDate').value || new Date().toISOString().split('T')[0],
+      startDate: app.querySelector('#field-startDate').value || getLocalDateString(),
       notes: app.querySelector('#field-notes').value.trim(),
       updatedAt: new Date().toISOString(),
     };

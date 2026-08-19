@@ -5,7 +5,7 @@ import {
   generateActivityId,
 } from '../db.js';
 import { navigate } from '../router.js';
-import { escapeHtml, showToast, getCategoryLabel, getDefaultExpiry } from '../utils.js';
+import { escapeHtml, showToast, getCategoryLabel, getDefaultExpiry, getLocalDateString } from '../utils.js';
 
 export async function renderActivityForm(activityId) {
   const isEdit = !!activityId;
@@ -35,7 +35,7 @@ export async function renderActivityForm(activityId) {
     };
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
 
   const categories = ['儿童', '体验', '社区', '临时'];
 

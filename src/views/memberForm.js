@@ -5,7 +5,7 @@ import {
   generateId,
 } from '../db.js';
 import { navigate } from '../router.js';
-import { escapeHtml, getDefaultExpiry, showToast } from '../utils.js';
+import { escapeHtml, getDefaultExpiry, getLocalDateString, showToast } from '../utils.js';
 
 export async function renderMemberForm(memberId) {
   const isEdit = !!memberId;
@@ -41,7 +41,7 @@ export async function renderMemberForm(memberId) {
     };
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
 
   app.innerHTML = `
     <div class="form-view">
@@ -182,7 +182,7 @@ export async function renderMemberForm(memberId) {
     } else if (membershipEnabled) {
       data.totalCount = null;
       data.remainingCount = null;
-      data.startDate = app.querySelector('#field-startDate').value || new Date().toISOString().split('T')[0];
+      data.startDate = app.querySelector('#field-startDate').value || getLocalDateString();
       data.expiryDate = app.querySelector('#field-expiryDate').value || getDefaultExpiry(data.startDate, selectedType);
     } else {
       data.totalCount = null;

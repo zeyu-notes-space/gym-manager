@@ -21,6 +21,7 @@ import {
   showToast,
   showConfirm,
   promptInput,
+  getLocalDateString,
 } from '../utils.js';
 
 let _checkinLock = false;
@@ -272,7 +273,7 @@ async function showRenewDialog(member) {
       </div>
       <div class="form-group" id="renew-date-group" style="display:none">
         <label>有效期开始</label>
-        <input type="date" class="input" id="renew-start" value="${new Date().toISOString().split('T')[0]}" />
+        <input type="date" class="input" id="renew-start" value="${getLocalDateString()}" />
       </div>
       <div class="modal-buttons">
         <button class="btn btn-secondary" id="renew-cancel">取消</button>
@@ -323,12 +324,12 @@ async function showRenewDialog(member) {
         const end = new Date(startDate + 'T00:00:00');
         end.setMonth(end.getMonth() + 1);
         end.setDate(end.getDate() - 1);
-        member.expiryDate = end.toISOString().split('T')[0];
+        member.expiryDate = getLocalDateString(end);
       } else {
         const end = new Date(startDate + 'T00:00:00');
         end.setFullYear(end.getFullYear() + 1);
         end.setDate(end.getDate() - 1);
-        member.expiryDate = end.toISOString().split('T')[0];
+        member.expiryDate = getLocalDateString(end);
       }
     }
 

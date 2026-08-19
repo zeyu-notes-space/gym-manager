@@ -38,7 +38,8 @@ export async function renderMemberList() {
   }
 
   const todayCheckins = await getTodayCheckinCount();
-  const members = await getAllMembers();
+  let members = await getAllMembers();
+  members = members.filter(m => m.membershipEnabled !== false);
   members.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
 
   app.innerHTML = `
@@ -72,8 +73,9 @@ export async function renderMemberList() {
   document.getElementById('search-input').oninput = async (e) => {
     const query = e.target.value.trim();
     const results = query ? await searchMembers(query) : await getAllMembers();
-    results.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
-    document.getElementById('member-list').innerHTML = renderMemberItems(results);
+    const filtered = results.filter(m => m.membershipEnabled !== false);
+    filtered.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+    document.getElementById('member-list').innerHTML = renderMemberItems(filtered);
     bindMemberClicks();
   };
 

@@ -60,7 +60,7 @@ export async function renderActivityDetail(activityId) {
           <h3>参与人员 (${registered.length})</h3>
           <div id="participant-list">
             ${registered.length === 0
-              ? '<div class="section-title" style="padding:0;color:var(--text-muted);text-transform:none;letter-spacing:0">暂无参与人员</div>'
+              ? '<div style="padding:8px 0;color:var(--text-muted);font-size:14px">暂无参与人员</div>'
               : registered.map(p => {
                   const linkedMember = p.linkedMemberId ? memberMap[p.linkedMemberId] : null;
                   return `
@@ -108,10 +108,9 @@ export async function renderActivityDetail(activityId) {
 }
 
 async function handleAddParticipant(activity) {
-  const choice = await showConfirm('关联已有会员？\n\n确认 = 选择会员\n取消 = 手动输入非会员');
-  
-  if (choice) {
-    // Pick from existing members
+  const useMember = await showConfirm('从已有会员中选择？');
+
+  if (useMember) {
     const allMembers = await getAllMembers();
     const memberItems = allMembers.map(m => ({
       id: m.id,
@@ -136,11 +135,10 @@ async function handleAddParticipant(activity) {
       createdAt: new Date().toISOString(),
     });
   } else {
-    // Manual entry for non-member
     const name = await promptInput('姓名 *', '输入姓名');
     if (!name) return;
     const phone = await promptInput('电话（选填）', '输入电话');
-    const guardianName = await promptInput('家长姓名（选填，儿童活动）', '输入家长姓名');
+    const guardianName = await promptInput('家长姓名（选填）', '输入家长姓名');
     const guardianPhone = await promptInput('家长电话（选填）', '输入家长电话');
 
     await addParticipant({

@@ -8,8 +8,8 @@ import {
   seedDemoData,
 } from '../db.js';
 import { navigate } from '../router.js';
-import { showToast, showConfirm, formatDateTime } from '../utils.js';
-import { APP_NAME, APP_VERSION } from '../config.js';
+import { showToast, showConfirm, formatDateTime, getLocalDateString } from '../utils.js';
+import { APP_NAME, APP_VERSION, BUILD_ID } from '../config.js';
 
 export async function renderSettings() {
   const app = document.getElementById('app');
@@ -27,7 +27,7 @@ export async function renderSettings() {
 
       <div style="padding:20px 16px 8px">
         <div style="font-size:22px;font-weight:700">${APP_NAME}</div>
-        <div style="font-size:13px;color:var(--text-muted);margin-top:2px">v${APP_VERSION} · ${formatDateTime(new Date().toISOString())}</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:2px">v${APP_VERSION} · build ${BUILD_ID}</div>
       </div>
 
       <div class="settings-section">
@@ -96,7 +96,10 @@ export async function renderSettings() {
       </div>
 
       <div class="settings-footer">
-        数据存储在本地设备 · 导出备份可迁移
+        ⚠️ 所有数据保存在当前设备本地 (IndexedDB)
+      </div>
+      <div class="settings-footer" style="padding-top:0">
+        清除浏览器数据会丢失 · 请定期导出备份
       </div>
     </div>
   `;
@@ -114,7 +117,7 @@ async function handleExport() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `oxy-fitness-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `oxy-fitness-backup-${getLocalDateString()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     showToast('导出成功');
