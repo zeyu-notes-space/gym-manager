@@ -1,8 +1,8 @@
-import { getMemberCount, getCourseCount, getActivityCount, clearAllData, seedDemoData } from '../db.js';
+import { getMemberCount, getCourseCount, getActivityCount } from '../db.js';
 import { navigate } from '../router.js';
-import { showToast, showConfirm, getLocalDateString } from '../utils.js';
+import { showToast, showConfirm } from '../utils.js';
 import { APP_NAME, APP_VERSION, BUILD_ID } from '../config.js';
-import { getBackupStatus, hasPendingBackup, manualBackup, restoreFromBackup } from '../backup.js';
+import { getBackupStatus, manualBackup, restoreFromBackup } from '../backup.js';
 
 export async function renderSettings() {
   const app = document.getElementById('app');
@@ -12,16 +12,15 @@ export async function renderSettings() {
     getActivityCount(),
   ]);
   const backupStatus = getBackupStatus();
-  const pending = hasPendingBackup();
 
-  const lastBackupDisplay = backupStatus.lastBackupTime
-    ? formatBackupTime(backupStatus.lastBackupTime)
+  const lastBackupDisplay = backupStatus.lastBackupAt
+    ? formatBackupTime(backupStatus.lastBackupAt)
     : '从未备份';
 
   app.innerHTML = `
     <div class="settings-view">
       <div class="top-bar">
-        <button class="btn-icon" onclick="window.__back()">‹</button>
+        <button class="btn-icon" id="btn-back">‹</button>
         <h1>设置</h1>
         <div style="width:44px"></div>
       </div>
@@ -32,7 +31,7 @@ export async function renderSettings() {
           <div class="info-row"><span class="label">版本</span><span class="value">v${APP_VERSION}</span></div>
           <div class="info-row"><span class="label">Build</span><span class="value">${BUILD_ID}</span></div>
           <div class="info-row" style="padding:10px 0 0;color:var(--text-muted);font-size:12px;border:none">
-            数据保存在当前手机中，正常退出或重启不会影响。系统会尽可能生成本机备份文件，用于应用数据异常时恢复。如果手机遗失、损坏、恢复出厂设置或备份文件被删除，本工具无法恢复已不存在的数据。
+            数据只保存在当前入口中。建议将主屏幕版作为正式入口，不要与 Safari 混用。业务操作会直接保存；如手机遗失、损坏或清除浏览器数据，本工具无法恢复没有导出的数据。
           </div>
         </div>
 
@@ -47,7 +46,7 @@ export async function renderSettings() {
           <h3>数据备份</h3>
           <div class="info-row">
             <span class="label">备份状态</span>
-            <span class="value">${pending ? '有未备份的数据' : '已备份'}</span>
+            <span class="value">${backupStatus.hasUnbackedChanges ? '有未备份的数据' : '当前无待备份变化'}</span>
           </div>
           <div class="info-row">
             <span class="label">上次备份</span>
@@ -59,17 +58,11 @@ export async function renderSettings() {
           </div>
         </div>
 
-        <div class="detail-card" style="border:1px solid rgba(231,76,60,0.2)">
-          <h3 style="color:var(--danger)">危险操作</h3>
-          <button class="btn btn-danger btn-block" id="btn-clear">清空所有数据</button>
-          <div style="margin-top:8px;font-size:12px;color:var(--text-muted);line-height:1.5">
-            此操作不可恢复。请确保已导出备份文件。
-          </div>
-        </div>
       </div>
     </div>
   `;
 
+  document.getElementById('btn-back').onclick = () => navigate('/');
   document.getElementById('btn-manual-backup').onclick = async () => {
     try {
       await manualBackup();
@@ -101,18 +94,6 @@ export async function renderSettings() {
     };
 
     input.click();
-  };
-
-  document.getElementById('btn-clear').onclick = async () => {
-    const ok1 = await showConfirm('确定清空所有数据？此操作不可恢复。');
-    if (!ok1) return;
-
-    const ok2 = await showConfirm('再次确认：所有会员、签到、私教、活动数据都会被删除。');
-    if (!ok2) return;
-
-    await clearAllData();
-    showToast('已清空');
-    navigate('/');
   };
 }
 

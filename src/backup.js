@@ -1,14 +1,23 @@
 /**
- * Auto-backup manager.
- * Views call attemptAutoBackup() after every successful business mutation.
- * Backup status is stored in localStorage (survives IndexedDB clears).
+ * Backup manager.
+ * Tracks dirty state for 48h evening reminder.
+ * NEVER auto-downloads — user clicks "立即备份" to trigger export.
  */
-import { exportAllData, importAllData, clearAllData } from './db.js';
-import { showToast } from './utils.js';
+import { exportAllData, importAllData } from './db.js';
+import { showToast, getLocalDateString } from './utils.js';
 import { APP_NAME, APP_VERSION, BUILD_ID } from './config.js';
 
 const STATUS_KEY = 'oxy-backup-status';
-const PENDING_KEY = 'oxy-backup-pending';
+const LEGACY_PENDING_KEY = 'oxy-backup-pending';
+
+const EMPTY_STATUS = {
+  lastDataChangeAt: null,
+  lastBackupAt: null,
+  lastBackupFileName: null,
+  lastBackupSize: null,
+  lastReminderAt: null,
+  hasUnbackedChanges: false,
+};
 
 function pad2(n) { return String(n).padStart(2, '0'); }
 
@@ -20,81 +29,43 @@ function formatNow() {
 export function getBackupStatus() {
   try {
     const raw = localStorage.getItem(STATUS_KEY);
-    return raw ? JSON.parse(raw) : { lastBackupTime: null, lastBackupFileName: null, lastBackupSize: null };
+    const stored = raw ? JSON.parse(raw) : {};
+    const legacyPending = localStorage.getItem(LEGACY_PENDING_KEY) === 'true';
+    return {
+      ...EMPTY_STATUS,
+      ...stored,
+      lastBackupAt: stored.lastBackupAt || stored.lastBackupTime || null,
+      hasUnbackedChanges: stored.hasUnbackedChanges === true || legacyPending,
+    };
   } catch {
-    return { lastBackupTime: null, lastBackupFileName: null, lastBackupSize: null };
+    return { ...EMPTY_STATUS };
   }
 }
 
-export function hasPendingBackup() {
-  return localStorage.getItem(PENDING_KEY) === 'true';
-}
-
-function recordBackupSuccess(fileName, size) {
-  const status = getBackupStatus();
-  status.lastBackupTime = new Date().toISOString();
-  status.lastBackupFileName = fileName;
-  status.lastBackupSize = size;
+function saveBackupStatus(status) {
   localStorage.setItem(STATUS_KEY, JSON.stringify(status));
-  localStorage.removeItem(PENDING_KEY);
-}
-
-function recordBackupFailed() {
-  localStorage.setItem(PENDING_KEY, 'true');
+  localStorage.removeItem(LEGACY_PENDING_KEY);
 }
 
 /**
- * Attempt auto-backup after successful business mutation.
- * Does NOT block the UI. Returns { saved, fileSaved }.
+ * Call after every successful business mutation.
+ * Only marks dirty — no download, no prompt.
  */
-export async function attemptAutoBackup({ silent = false } = {}) {
-  let backup, json;
-  try {
-    backup = await exportAllData();
-    json = JSON.stringify(backup, null, 2);
-  } catch (e) {
-    console.error('AutoBackup export failed:', e);
-    return { saved: false, fileSaved: false };
-  }
-
-  const blob = new Blob([json], { type: 'application/json' });
-  const fileName = `OXY_AutoBackup_${formatNow()}.json`;
-  const url = URL.createObjectURL(blob);
-
-  let fileSaved = false;
-  try {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    a.style.display = 'none';
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    fileSaved = true;
-    recordBackupSuccess(fileName, blob.size);
-  } catch (e) {
-    recordBackupFailed();
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  }
-
-  if (!silent && !fileSaved) {
-    showToast('数据已保存，但本机备份未生成');
-  }
-
-  return { saved: true, fileSaved, fileName, size: blob.size };
+export function markDataChanged() {
+  const status = getBackupStatus();
+  status.lastDataChangeAt = new Date().toISOString();
+  status.hasUnbackedChanges = true;
+  saveBackupStatus(status);
 }
 
 /**
- * Manual backup (triggered by user gesture in settings).
- * Always attempts download.
+ * Manual backup (triggered by user gesture).
  */
 export async function manualBackup() {
   const backup = await exportAllData();
   const json = JSON.stringify(backup, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
-  const fileName = `OXY_ManualBackup_${formatNow()}.json`;
+  const fileName = `OXY_Backup_${formatNow()}.json`;
   const url = URL.createObjectURL(blob);
 
   const a = document.createElement('a');
@@ -107,22 +78,85 @@ export async function manualBackup() {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 
-  recordBackupSuccess(fileName, blob.size);
+  // Record backup success
+  const status = getBackupStatus();
+  status.lastBackupAt = new Date().toISOString();
+  status.lastBackupFileName = fileName;
+  status.lastBackupSize = blob.size;
+  status.hasUnbackedChanges = false;
+  saveBackupStatus(status);
+
   showToast('备份成功');
   return fileName;
 }
 
 /**
- * Validate a backup file JSON string.
- * Returns { valid: boolean, backup?: object, reason?: string }.
+ * Check if the 48h evening reminder should trigger.
+ * Conditions:
+ * - hasUnbackedChanges === true
+ * - lastBackupAt === null OR lastBackupAt > 48h ago
+ * - current time is 18:00–23:00 (evening window)
+ * - lastReminderAt is not today (no repeat same day)
+ * If lastDataChangeAt is null (never changed), don't remind.
+ * If lastDataChangeAt is set but < 48h ago AND lastBackupAt is null, don't remind either (48h grace).
  */
+export function shouldRemind() {
+  const status = getBackupStatus();
+
+  // No changes → no reminder
+  if (!status.lastDataChangeAt) return false;
+  if (!status.hasUnbackedChanges) return false;
+
+  const now = new Date();
+  const hour = now.getHours();
+
+  // Evening window 18:00–22:59
+  if (hour < 18 || hour >= 23) return false;
+
+  // Already reminded today?
+  if (status.lastReminderAt) {
+    const reminderDate = getLocalDateString(new Date(status.lastReminderAt));
+    const todayDate = getLocalDateString();
+    if (reminderDate === todayDate) return false;
+  }
+
+  const nowMs = now.getTime();
+
+  // If lastBackupAt exists, check 48h threshold
+  if (status.lastBackupAt) {
+    const backupMs = new Date(status.lastBackupAt).getTime();
+    const hoursSinceBackup = (nowMs - backupMs) / (1000 * 60 * 60);
+    if (hoursSinceBackup < 48) return false;
+  } else {
+    // Never backed up — check 48h since first data change
+    if (status.lastDataChangeAt) {
+      const changeMs = new Date(status.lastDataChangeAt).getTime();
+      const hoursSinceChange = (nowMs - changeMs) / (1000 * 60 * 60);
+      if (hoursSinceChange < 48) return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Call when user dismisses the reminder. Marks today as reminded.
+ */
+export function dismissReminder() {
+  const status = getBackupStatus();
+  status.lastReminderAt = new Date().toISOString();
+  status.hasUnbackedChanges = true; // Keep dirty state
+  saveBackupStatus(status);
+}
+
+// ═══ Restore ═══
+
 export function validateBackupFile(text) {
   try {
     const obj = JSON.parse(text);
     if (!obj || typeof obj !== 'object') {
       return { valid: false, reason: '不是有效的 JSON 文件' };
     }
-    // Accept both current and legacy app identifiers
     if (obj.app !== 'OXY FITNESS' && obj.app !== 'oxy-fitness-local') {
       return { valid: false, reason: '这不是 OXY FITNESS 备份文件' };
     }
@@ -143,9 +177,6 @@ export function validateBackupFile(text) {
   }
 }
 
-/**
- * Restore from backup: validate → clear → write → verify.
- */
 export async function restoreFromBackup(file) {
   const text = await file.text();
   const validation = validateBackupFile(text);
@@ -156,7 +187,14 @@ export async function restoreFromBackup(file) {
   const backup = validation.backup;
   await importAllData(backup);
 
-  recordBackupSuccess(file.name || 'restored.json', text.length);
+  // Clear dirty state after restore
+  const status = getBackupStatus();
+  status.lastBackupAt = new Date().toISOString();
+  status.lastBackupFileName = file.name || 'restored.json';
+  status.lastBackupSize = text.length;
+  status.hasUnbackedChanges = false;
+  saveBackupStatus(status);
+
   showToast('恢复成功');
 
   return {

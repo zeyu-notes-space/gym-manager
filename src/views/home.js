@@ -7,13 +7,20 @@ import {
 } from '../db.js';
 import { navigate } from '../router.js';
 import { APP_NAME } from '../config.js';
+import { shouldRemind, dismissReminder, manualBackup } from '../backup.js';
+import { showConfirm, showToast } from '../utils.js';
+
+const PWA_NOTICE_KEY = 'oxy-pwa-entry-notice-seen';
 
 export async function renderHome() {
   const app = document.getElementById('app');
+  const totalMemberCount = await getMemberCount();
   const memberCount = await getMemberCountByMembership();
   const todayCheckins = await getTodayCheckinCount();
   const courseCount = await getCourseCount();
   const activityCount = await getActivityCount();
+  const showPwaNotice = totalMemberCount === 0 && courseCount === 0 && activityCount === 0
+    && localStorage.getItem(PWA_NOTICE_KEY) !== 'true';
 
   app.innerHTML = `
     <div class="home-dashboard">
@@ -26,6 +33,15 @@ export async function renderHome() {
       </div>
 
       <div class="module-list">
+        ${showPwaNotice ? `
+          <div class="entry-notice" id="pwa-entry-notice">
+            <div>
+              <strong>请固定使用同一个入口</strong>
+              <p>建议固定使用主屏幕版，请不要混用 Safari 和桌面版。</p>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btn-dismiss-pwa-notice">知道了</button>
+          </div>
+        ` : ''}
         <div class="module-entry" id="module-members">
           <div class="module-entry-header">
             <div class="module-icon members">👥</div>
@@ -78,4 +94,39 @@ export async function renderHome() {
   document.getElementById('module-members').onclick = () => navigate('/members');
   document.getElementById('module-training').onclick = () => navigate('/training');
   document.getElementById('module-activities').onclick = () => navigate('/activities');
+
+  const dismissNotice = document.getElementById('btn-dismiss-pwa-notice');
+  if (dismissNotice) {
+    dismissNotice.onclick = (event) => {
+      event.stopPropagation();
+      localStorage.setItem(PWA_NOTICE_KEY, 'true');
+      document.getElementById('pwa-entry-notice')?.remove();
+    };
+  }
+
+  // Check 48h evening reminder
+  checkReminder();
+}
+
+async function checkReminder() {
+  if (!shouldRemind()) return;
+
+  const choice = await showConfirm(
+    '有未备份的数据。最近有新的会员、私教或活动记录，建议现在备份一次。',
+    '稍后再说',
+    '现在备份'
+  );
+
+  if (choice) {
+    // User chose "现在备份"
+    try {
+      await manualBackup();
+      showToast('已备份');
+    } catch (e) {
+      showToast('备份失败: ' + e.message);
+    }
+  } else {
+    // User chose "稍后再说"
+    dismissReminder();
+  }
 }

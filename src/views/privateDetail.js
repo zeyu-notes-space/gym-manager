@@ -7,12 +7,11 @@ import {
   deleteCourse,
   addSession,
   deleteSession,
-  getAllMembers,
   generateSessionId,
 } from '../db.js';
 import { navigate } from '../router.js';
 import { escapeHtml, formatDateTime, showToast, showConfirm, promptInput } from '../utils.js';
-import { attemptAutoBackup } from '../backup.js';
+import { markDataChanged } from '../backup.js';
 
 let _sessionLock = false;
 
@@ -23,7 +22,9 @@ export async function renderPrivateDetail(courseId) {
     return;
   }
 
-  const member = await getMember(course.memberId);
+  const member = course.memberId ? await getMember(course.memberId) : null;
+  const clientName = course.clientName || member?.name || '未命名客户';
+  const clientPhone = course.clientPhone || member?.phone || '';
   const sessions = await getSessionsByCourse(courseId);
   sessions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
@@ -55,7 +56,8 @@ export async function renderPrivateDetail(courseId) {
 
         <div class="detail-card">
           <h3>课包信息</h3>
-          <div class="info-row"><span class="label">客户</span><span class="value">${member ? escapeHtml(member.name) : '（已删除）'}</span></div>
+          <div class="info-row"><span class="label">客户</span><span class="value">${escapeHtml(clientName)}</span></div>
+          ${clientPhone ? `<div class="info-row"><span class="label">电话</span><span class="value">${escapeHtml(clientPhone)}</span></div>` : ''}
           <div class="info-row"><span class="label">教练</span><span class="value">${escapeHtml(course.coachName || '—')}</span></div>
           <div class="info-row"><span class="label">课程</span><span class="value">${escapeHtml(course.packageName || '—')}</span></div>
           <div class="info-row"><span class="label">开始</span><span class="value">${course.startDate || '—'}</span></div>
@@ -121,13 +123,13 @@ async function handleConsume(course) {
     await addSession({
       id: generateSessionId(),
       courseId: course.id,
-      memberId: course.memberId,
+      memberId: course.memberId || null,
       timestamp: new Date().toISOString(),
       lessonsUsed: 1,
       notes: '',
     });
 
-    await attemptAutoBackup({ silent: true });
+    markDataChanged();
     showToast('消课成功');
     renderPrivateDetail(course.id);
   } finally {
@@ -150,7 +152,7 @@ async function handleUndo(course) {
   course.updatedAt = new Date().toISOString();
   await updateCourse(course);
 
-  await attemptAutoBackup({ silent: true });
+  markDataChanged();
   showToast('已撤销');
   renderPrivateDetail(course.id);
 }
@@ -169,13 +171,14 @@ async function handleAddLessons(course) {
   course.updatedAt = new Date().toISOString();
   await updateCourse(course);
 
-  await attemptAutoBackup({ silent: true });
+  markDataChanged();
   showToast(`增加 ${add} 课时成功`);
   renderPrivateDetail(course.id);
 }
 
 async function handleDelete(course) {
-  const ok = await showConfirm(`确认删除「${escapeHtml(course.packageName || '私教课')}」课包？`);
+  const clientName = course.clientName || '该客户';
+  const ok = await showConfirm(`确认删除「${escapeHtml(clientName)}」的课包？`);
   if (!ok) return;
 
   const sessions = await getSessionsByCourse(course.id);
@@ -184,7 +187,7 @@ async function handleDelete(course) {
   }
   await deleteCourse(course.id);
 
-  await attemptAutoBackup({ silent: true });
+  markDataChanged();
   showToast('已删除');
   navigate('/training');
 }

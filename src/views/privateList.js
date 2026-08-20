@@ -5,7 +5,7 @@ import {
   getAllMembers,
 } from '../db.js';
 import { navigate } from '../router.js';
-import { escapeHtml, showToast } from '../utils.js';
+import { escapeHtml } from '../utils.js';
 
 export async function renderPrivateList() {
   const app = document.getElementById('app');
@@ -15,9 +15,9 @@ export async function renderPrivateList() {
     app.innerHTML = `
       <div class="list-view">
         <div class="top-bar">
-          <button class="btn-icon" onclick="window.__back()">‹</button>
+          <button class="btn-icon" id="btn-back">‹</button>
           <h1>私教管理</h1>
-          <div style="width:36px"></div>
+          <div style="width:44px"></div>
         </div>
         <div class="empty-state">
           <div class="empty-icon">🏋️</div>
@@ -27,6 +27,7 @@ export async function renderPrivateList() {
         </div>
       </div>
     `;
+    document.getElementById('btn-back').onclick = () => navigate('/');
     document.getElementById('btn-new-course').onclick = () => navigate('/training/new');
     return;
   }
@@ -41,9 +42,9 @@ export async function renderPrivateList() {
   app.innerHTML = `
     <div class="list-view">
       <div class="top-bar">
-        <button class="btn-icon" onclick="window.__back()">‹</button>
+        <button class="btn-icon" id="btn-back">‹</button>
         <h1>私教管理</h1>
-        <div style="width:36px"></div>
+        <div style="width:44px"></div>
       </div>
       <div class="stats-row">
         <div class="stat-box">
@@ -66,6 +67,7 @@ export async function renderPrivateList() {
     </div>
   `;
 
+  document.getElementById('btn-back').onclick = () => navigate('/');
   document.getElementById('search-input').oninput = async (e) => {
     const query = e.target.value.trim();
     const results = query ? await searchCourses(query) : await getAllCourses();
@@ -85,17 +87,18 @@ function renderCourseItems(courses, memberMap) {
 
   return courses.map(c => {
     const member = memberMap[c.memberId];
-    const name = member ? member.name : '（已删除）';
+    const name = c.clientName || member?.name || '未命名客户';
+    const phone = c.clientPhone || member?.phone || '';
     const remaining = c.remainingLessons || 0;
     const total = c.totalLessons || 0;
     const used = total - remaining;
 
     return `
       <div class="list-item" data-id="${escapeHtml(c.id)}">
-        <div class="list-item-avatar">${member ? name.charAt(0) : '?'}</div>
+        <div class="list-item-avatar">${escapeHtml(name.charAt(0) || '?')}</div>
         <div class="list-item-info">
           <div class="item-title">${escapeHtml(name)}</div>
-          <div class="item-subtitle">${escapeHtml(c.packageName || '私教课')} · ${escapeHtml(c.coachName || '')}</div>
+          <div class="item-subtitle">${escapeHtml(c.packageName || '私教课')}${c.coachName ? ` · ${escapeHtml(c.coachName)}` : ''}${phone ? ` · ${escapeHtml(phone)}` : ''}</div>
         </div>
         <div class="list-item-meta">
           <div class="meta-primary">${remaining}/${total}</div>

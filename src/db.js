@@ -274,18 +274,19 @@ export async function searchCourses(query) {
   const q = query.toLowerCase().trim();
   if (!q) return all;
 
-  const matchedMemberIds = allMembers
-    .filter(m => m.name.toLowerCase().includes(q) || (m.phone && m.phone.includes(q)))
-    .map(m => m.id);
+  const memberMap = new Map(allMembers.map(m => [m.id, m]));
 
-  if (matchedMemberIds.length > 0) {
-    return all.filter(c => matchedMemberIds.includes(c.memberId));
-  }
-
-  return all.filter(c =>
+  return all.filter(c => {
+    const linkedMember = c.memberId ? memberMap.get(c.memberId) : null;
+    return (
+    (c.clientName && c.clientName.toLowerCase().includes(q)) ||
+    (c.clientPhone && c.clientPhone.includes(q)) ||
+    (linkedMember?.name && linkedMember.name.toLowerCase().includes(q)) ||
+    (linkedMember?.phone && linkedMember.phone.includes(q)) ||
     (c.packageName && c.packageName.toLowerCase().includes(q)) ||
     (c.coachName && c.coachName.toLowerCase().includes(q))
-  );
+    );
+  });
 }
 
 // ═══ Private Sessions ═══

@@ -23,7 +23,7 @@ import {
   promptInput,
   getLocalDateString,
 } from '../utils.js';
-import { attemptAutoBackup } from '../backup.js';
+import { markDataChanged } from '../backup.js';
 
 let _checkinLock = false;
 
@@ -217,7 +217,7 @@ async function handleCheckin(member) {
       await updateMember(member);
     }
 
-    await attemptAutoBackup({ silent: true });
+    markDataChanged();
     showToast('签到成功');
     renderMemberDetail(member.id);
   } finally {
@@ -251,7 +251,7 @@ async function handleUndo(member) {
     timestamp: new Date().toISOString(),
   });
 
-  await attemptAutoBackup({ silent: true });
+  markDataChanged();
   showToast('已撤销');
   renderMemberDetail(member.id);
 }
@@ -340,7 +340,7 @@ async function showRenewDialog(member) {
     member.updatedAt = new Date().toISOString();
     await updateMember(member);
 
-    await attemptAutoBackup({ silent: true });
+    markDataChanged();
     overlay.classList.remove('show');
     setTimeout(() => overlay.remove(), 200);
     showToast('续卡成功');
@@ -355,7 +355,7 @@ async function handleDelete(member) {
   if (!ok) return;
 
   await updateMember({ ...member, membershipEnabled: false, updatedAt: new Date().toISOString() });
-  await attemptAutoBackup({ silent: true });
+  markDataChanged();
   showToast('已禁用');
   navigate('/members');
 }

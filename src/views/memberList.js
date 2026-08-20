@@ -15,9 +15,9 @@ export async function renderMemberList() {
     app.innerHTML = `
       <div class="list-view">
         <div class="top-bar">
-          <button class="btn-icon" onclick="window.__back()">‹</button>
+          <button class="btn-icon" id="btn-back">‹</button>
           <h1>会员管理</h1>
-          <div style="width:36px"></div>
+          <div style="width:44px"></div>
         </div>
         <div class="empty-state">
           <div class="empty-icon">👥</div>
@@ -27,6 +27,7 @@ export async function renderMemberList() {
         </div>
       </div>
     `;
+    document.getElementById('btn-back').onclick = () => navigate('/');
     document.getElementById('btn-first-member').onclick = () => navigate('/members/new');
     return;
   }
@@ -39,9 +40,9 @@ export async function renderMemberList() {
   app.innerHTML = `
     <div class="list-view">
       <div class="top-bar">
-        <button class="btn-icon" onclick="window.__back()">‹</button>
+        <button class="btn-icon" id="btn-back">‹</button>
         <h1>会员管理</h1>
-        <div style="width:36px"></div>
+        <div style="width:44px"></div>
       </div>
       <div class="stats-row">
         <div class="stat-box">
@@ -64,6 +65,7 @@ export async function renderMemberList() {
     </div>
   `;
 
+  document.getElementById('btn-back').onclick = () => navigate('/');
   document.getElementById('search-input').oninput = async (e) => {
     const query = e.target.value.trim();
     const results = query ? await searchMembers(query) : await getAllMembers();

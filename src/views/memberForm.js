@@ -6,11 +6,15 @@ import {
 } from '../db.js';
 import { navigate } from '../router.js';
 import { escapeHtml, getDefaultExpiry, getLocalDateString, showToast } from '../utils.js';
-import { attemptAutoBackup } from '../backup.js';
+import { markDataChanged } from '../backup.js';
 
 export async function renderMemberForm(memberId) {
   const isEdit = !!memberId;
   const member = isEdit ? await getMember(memberId) : null;
+  if (isEdit && !member) {
+    navigate('/members');
+    return;
+  }
 
   const app = document.getElementById('app');
 
@@ -47,9 +51,9 @@ export async function renderMemberForm(memberId) {
   app.innerHTML = `
     <div class="form-view">
       <div class="top-bar">
-        <button class="btn-icon" onclick="window.__back()">‹</button>
+        <button class="btn-icon" id="btn-back">‹</button>
         <h1>${isEdit ? '编辑会员' : '新增会员'}</h1>
-        <div style="width:36px"></div>
+        <div style="width:44px"></div>
       </div>
 
       <div class="form-body">
@@ -114,6 +118,10 @@ export async function renderMemberForm(memberId) {
       </div>
     </div>
   `;
+
+  app.querySelector('#btn-back').onclick = () => navigate(
+    isEdit ? '/members/' + encodeURIComponent(member.id) : '/members'
+  );
 
   // Card type selector
   const typeBtns = app.querySelectorAll('.type-btn');
@@ -196,16 +204,16 @@ export async function renderMemberForm(memberId) {
       data.id = member.id;
       data.createdAt = member.createdAt;
       await updateMember(data);
-      await attemptAutoBackup({ silent: true });
+      markDataChanged();
       showToast('保存成功');
-      navigate('/members/' + encodeURIComponent(member.id));
+      navigate('/members/' + encodeURIComponent(member.id), { replace: true });
     } else {
       data.id = generateId();
       data.createdAt = new Date().toISOString();
       await addMember(data);
-      await attemptAutoBackup({ silent: true });
+      markDataChanged();
       showToast('创建成功');
-      navigate('/members/' + encodeURIComponent(data.id));
+      navigate('/members/' + encodeURIComponent(data.id), { replace: true });
     }
   };
 }

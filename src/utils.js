@@ -96,7 +96,7 @@ export function showToast(message) {
   }, 2000);
 }
 
-export function showConfirm(message) {
+export function showConfirm(message, cancelLabel, confirmLabel) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -104,8 +104,8 @@ export function showConfirm(message) {
       <div class="modal-dialog">
         <p>${escapeHtml(message)}</p>
         <div class="modal-buttons">
-          <button class="btn btn-secondary" id="modal-cancel">取消</button>
-          <button class="btn btn-primary" id="modal-confirm">确认</button>
+          <button class="btn btn-secondary" id="modal-cancel">${cancelLabel || '取消'}</button>
+          <button class="btn btn-primary" id="modal-confirm">${confirmLabel || '确认'}</button>
         </div>
       </div>
     `;

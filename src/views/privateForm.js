@@ -2,22 +2,27 @@ import {
   getCourse,
   addCourse,
   updateCourse,
-  getAllMembers,
+  getMember,
   generateCourseId,
 } from '../db.js';
 import { navigate } from '../router.js';
-import { escapeHtml, showToast, getLocalDateString } from '../utils.js';
-import { attemptAutoBackup } from '../backup.js';
+import { escapeHtml, showToast } from '../utils.js';
+import { markDataChanged } from '../backup.js';
 
 export async function renderPrivateForm(courseId) {
   const isEdit = !!courseId;
   const course = isEdit ? await getCourse(courseId) : null;
-  const members = await getAllMembers();
+  if (isEdit && !course) {
+    navigate('/training');
+    return;
+  }
+  const linkedMember = course?.memberId ? await getMember(course.memberId) : null;
 
   const app = document.getElementById('app');
 
   let defaults = {
-    memberId: course ? course.memberId : '',
+    clientName: course ? (course.clientName || linkedMember?.name || '') : '',
+    clientPhone: course ? (course.clientPhone || linkedMember?.phone || '') : '',
     packageName: course ? (course.packageName || '') : '',
     coachName: course ? (course.coachName || '') : '',
     totalLessons: course ? (course.totalLessons || 20) : 20,
@@ -29,21 +34,18 @@ export async function renderPrivateForm(courseId) {
   app.innerHTML = `
     <div class="form-view">
       <div class="top-bar">
-        <button class="btn-icon" onclick="window.__back()">‹</button>
+        <button class="btn-icon" id="btn-back">‹</button>
         <h1>${isEdit ? '编辑课包' : '创建课包'}</h1>
-        <div style="width:36px"></div>
+        <div style="width:44px"></div>
       </div>
       <div class="form-body">
         <div class="form-group">
-          <label>客户 *</label>
-          <select class="input" id="field-memberId">
-            <option value="">选择客户</option>
-            ${members.map(m => `
-              <option value="${escapeHtml(m.id)}" ${m.id === defaults.memberId ? 'selected' : ''}>
-                ${escapeHtml(m.name)}${m.phone ? ` · ${escapeHtml(m.phone)}` : ''}
-              </option>
-            `).join('')}
-          </select>
+          <label>客户姓名 *</label>
+          <input type="text" class="input" id="field-clientName" value="${escapeHtml(defaults.clientName)}" placeholder="如：张三" />
+        </div>
+        <div class="form-group">
+          <label>电话（选填）</label>
+          <input type="tel" class="input" id="field-clientPhone" value="${escapeHtml(defaults.clientPhone)}" placeholder="选填" inputmode="tel" />
         </div>
         <div class="form-group">
           <label>总课时 *</label>
@@ -72,39 +74,52 @@ export async function renderPrivateForm(courseId) {
     </div>
   `;
 
+  app.querySelector('#btn-back').onclick = () => navigate(
+    isEdit ? '/training/' + encodeURIComponent(course.id) : '/training'
+  );
+
   app.querySelector('#btn-save').onclick = async () => {
-    const memberId = app.querySelector('#field-memberId').value;
-    if (!memberId) {
-      showToast('请选择客户');
+    const clientName = app.querySelector('#field-clientName').value.trim();
+    if (!clientName) {
+      showToast('请输入客户姓名');
+      return;
+    }
+
+    const totalLessons = parseInt(app.querySelector('#field-totalLessons').value, 10);
+    if (!Number.isInteger(totalLessons) || totalLessons < 1) {
+      showToast('请输入有效总课时');
       return;
     }
 
     const data = {
-      memberId,
+      memberId: course?.memberId || null,
+      clientName,
+      clientPhone: app.querySelector('#field-clientPhone').value.trim(),
       packageName: app.querySelector('#field-packageName').value.trim() || '',
       coachName: app.querySelector('#field-coachName').value.trim(),
-      totalLessons: parseInt(app.querySelector('#field-totalLessons').value) || 20,
-      startDate: app.querySelector('#field-startDate').value || getLocalDateString(),
+      totalLessons,
+      startDate: app.querySelector('#field-startDate').value || '',
       notes: app.querySelector('#field-notes').value.trim(),
       updatedAt: new Date().toISOString(),
     };
 
     if (isEdit) {
       data.id = course.id;
-      data.remainingLessons = course.remainingLessons;
+      const usedLessons = Math.max(0, (course.totalLessons || 0) - (course.remainingLessons || 0));
+      data.remainingLessons = Math.max(0, totalLessons - usedLessons);
       data.createdAt = course.createdAt;
       await updateCourse(data);
-      await attemptAutoBackup({ silent: true });
+      markDataChanged();
       showToast('保存成功');
-      navigate('/training/' + encodeURIComponent(course.id));
+      navigate('/training/' + encodeURIComponent(course.id), { replace: true });
     } else {
       data.remainingLessons = data.totalLessons;
       data.id = generateCourseId();
       data.createdAt = new Date().toISOString();
       await addCourse(data);
-      await attemptAutoBackup({ silent: true });
+      markDataChanged();
       showToast('创建成功');
-      navigate('/training/' + encodeURIComponent(data.id));
+      navigate('/training/' + encodeURIComponent(data.id), { replace: true });
     }
   };
 }

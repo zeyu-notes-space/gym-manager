@@ -3,10 +3,9 @@ import {
   getActivityCount,
   getUpcomingActivities,
   getParticipantsByActivity,
-  getAllMembers,
 } from '../db.js';
 import { navigate } from '../router.js';
-import { escapeHtml, formatDate, formatTime, getCategoryLabel, showToast } from '../utils.js';
+import { escapeHtml, getCategoryLabel } from '../utils.js';
 
 export async function renderActivityList() {
   const app = document.getElementById('app');
@@ -16,9 +15,9 @@ export async function renderActivityList() {
     app.innerHTML = `
       <div class="list-view">
         <div class="top-bar">
-          <button class="btn-icon" onclick="window.__back()">‹</button>
+          <button class="btn-icon" id="btn-back">‹</button>
           <h1>活动管理</h1>
-          <div style="width:36px"></div>
+          <div style="width:44px"></div>
         </div>
         <div class="empty-state">
           <div class="empty-icon">📋</div>
@@ -28,16 +27,13 @@ export async function renderActivityList() {
         </div>
       </div>
     `;
+    document.getElementById('btn-back').onclick = () => navigate('/');
     document.getElementById('btn-new').onclick = () => navigate('/activities/new');
     return;
   }
 
   const activities = await getAllActivities();
   const upcoming = await getUpcomingActivities();
-  const allMembers = await getAllMembers();
-  const memberMap = {};
-  allMembers.forEach(m => { memberMap[m.id] = m; });
-
   activities.sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
 
   // Pre-fetch participant counts
@@ -50,9 +46,9 @@ export async function renderActivityList() {
   app.innerHTML = `
     <div class="list-view">
       <div class="top-bar">
-        <button class="btn-icon" onclick="window.__back()">‹</button>
+        <button class="btn-icon" id="btn-back">‹</button>
         <h1>活动管理</h1>
-        <div style="width:36px"></div>
+        <div style="width:44px"></div>
       </div>
       <div class="stats-row">
         <div class="stat-box">
@@ -75,6 +71,7 @@ export async function renderActivityList() {
     </div>
   `;
 
+  document.getElementById('btn-back').onclick = () => navigate('/');
   document.getElementById('search-input').oninput = async (e) => {
     const q = e.target.value.toLowerCase().trim();
     let filtered = activities;
@@ -122,5 +119,3 @@ function bindClicks() {
     el.onclick = () => navigate('/activities/' + encodeURIComponent(el.dataset.id));
   });
 }
-
-window.__back = () => navigate('/');

@@ -1,6 +1,6 @@
 import './style.css';
 import { getDB } from './db.js';
-import { initRouter, navigate } from './router.js';
+import { initRouter } from './router.js';
 import { renderHome } from './views/home.js';
 import { renderMemberList } from './views/memberList.js';
 import { renderMemberDetail } from './views/memberDetail.js';
@@ -20,9 +20,6 @@ window.__diagnoseReport = diagnoseReport;
 
 async function init() {
   await getDB();
-
-  // Back button helper
-  window.__back = () => window.history.length > 2 ? window.history.back() : navigate('/');
 
   initRouter([
     ['/', () => renderHome()],

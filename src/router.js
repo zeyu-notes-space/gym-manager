@@ -34,7 +34,8 @@ export function initRouter(routes) {
     }
 
     // 404
-    app.innerHTML = `<div class="error-state"><h2>页面未找到</h2><button class="btn btn-primary" onclick="navigate('/')">返回首页</button></div>`;
+    app.innerHTML = `<div class="error-state"><h2>页面未找到</h2><button class="btn btn-primary" id="not-found-home">返回首页</button></div>`;
+    document.getElementById('not-found-home').onclick = () => navigate('/');
   }
 
   window.addEventListener('hashchange', resolve);
@@ -64,8 +65,17 @@ function matchRoute(pattern, hash) {
   return params;
 }
 
-export function navigate(path) {
-  location.hash = '#' + path;
+export function navigate(path, { replace = false } = {}) {
+  const nextHash = '#' + path;
+  if (location.hash === nextHash) return;
+
+  if (replace) {
+    history.replaceState(null, '', nextHash);
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    return;
+  }
+
+  location.hash = nextHash;
 }
 
 export function getCurrentPath() {

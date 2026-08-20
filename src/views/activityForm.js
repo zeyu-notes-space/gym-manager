@@ -6,11 +6,15 @@ import {
 } from '../db.js';
 import { navigate } from '../router.js';
 import { escapeHtml, showToast, getCategoryLabel, getDefaultExpiry, getLocalDateString } from '../utils.js';
-import { attemptAutoBackup } from '../backup.js';
+import { markDataChanged } from '../backup.js';
 
 export async function renderActivityForm(activityId) {
   const isEdit = !!activityId;
   const activity = isEdit ? await getActivity(activityId) : null;
+  if (isEdit && !activity) {
+    navigate('/activities');
+    return;
+  }
 
   const app = document.getElementById('app');
 
@@ -41,9 +45,9 @@ export async function renderActivityForm(activityId) {
   app.innerHTML = `
     <div class="form-view">
       <div class="top-bar">
-        <button class="btn-icon" onclick="window.__back()">‹</button>
+        <button class="btn-icon" id="btn-back">‹</button>
         <h1>${isEdit ? '编辑活动' : '创建活动'}</h1>
-        <div style="width:36px"></div>
+        <div style="width:44px"></div>
       </div>
 
       <div class="form-body">
@@ -70,6 +74,7 @@ export async function renderActivityForm(activityId) {
         <div class="form-group">
           <label>开始时间（选填）</label>
           <input type="time" class="input" id="field-startTime" value="${defaults.startTime || ''}" />
+        </div>
 
         <div class="form-group">
           <label>结束时间（选填）</label>
@@ -92,6 +97,10 @@ export async function renderActivityForm(activityId) {
       </div>
     </div>
   `;
+
+  app.querySelector('#btn-back').onclick = () => navigate(
+    isEdit ? '/activities/' + encodeURIComponent(activity.id) : '/activities'
+  );
 
   document.getElementById('btn-save').onclick = async () => {
     const title = app.querySelector('#field-title').value.trim();
@@ -123,16 +132,16 @@ export async function renderActivityForm(activityId) {
       data.id = activity.id;
       data.createdAt = activity.createdAt;
       await updateActivity(data);
-      await attemptAutoBackup({ silent: true });
+      markDataChanged();
       showToast('保存成功');
-      navigate('/activities/' + encodeURIComponent(activity.id));
+      navigate('/activities/' + encodeURIComponent(activity.id), { replace: true });
     } else {
       data.id = generateActivityId();
       data.createdAt = new Date().toISOString();
       await addActivity(data);
-      await attemptAutoBackup({ silent: true });
+      markDataChanged();
       showToast('创建成功');
-      navigate('/activities/' + encodeURIComponent(data.id));
+      navigate('/activities/' + encodeURIComponent(data.id), { replace: true });
     }
   };
 }
