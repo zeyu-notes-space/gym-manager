@@ -12,6 +12,7 @@ import {
 } from '../db.js';
 import { navigate } from '../router.js';
 import { escapeHtml, formatDateTime, showToast, showConfirm, promptInput } from '../utils.js';
+import { attemptAutoBackup } from '../backup.js';
 
 let _sessionLock = false;
 
@@ -126,6 +127,7 @@ async function handleConsume(course) {
       notes: '',
     });
 
+    await attemptAutoBackup({ silent: true });
     showToast('消课成功');
     renderPrivateDetail(course.id);
   } finally {
@@ -148,6 +150,7 @@ async function handleUndo(course) {
   course.updatedAt = new Date().toISOString();
   await updateCourse(course);
 
+  await attemptAutoBackup({ silent: true });
   showToast('已撤销');
   renderPrivateDetail(course.id);
 }
@@ -166,6 +169,7 @@ async function handleAddLessons(course) {
   course.updatedAt = new Date().toISOString();
   await updateCourse(course);
 
+  await attemptAutoBackup({ silent: true });
   showToast(`增加 ${add} 课时成功`);
   renderPrivateDetail(course.id);
 }
@@ -180,6 +184,7 @@ async function handleDelete(course) {
   }
   await deleteCourse(course.id);
 
+  await attemptAutoBackup({ silent: true });
   showToast('已删除');
   navigate('/training');
 }

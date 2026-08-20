@@ -6,6 +6,7 @@ import {
 } from '../db.js';
 import { navigate } from '../router.js';
 import { escapeHtml, getDefaultExpiry, getLocalDateString, showToast } from '../utils.js';
+import { attemptAutoBackup } from '../backup.js';
 
 export async function renderMemberForm(memberId) {
   const isEdit = !!memberId;
@@ -54,16 +55,16 @@ export async function renderMemberForm(memberId) {
       <div class="form-body">
         <div class="form-group">
           <label>姓名 *</label>
-          <input type="text" class="input" id="field-name" value="${escapeHtml(defaults.name)}" placeholder="输入姓名" />
+          <input type="text" class="input" id="field-name" value="${escapeHtml(defaults.name)}" placeholder="必填" />
         </div>
 
         <div class="form-group">
-          <label>手机号</label>
-          <input type="tel" class="input" id="field-phone" value="${escapeHtml(defaults.phone)}" placeholder="选填" />
+          <label>手机号（选填）</label>
+          <input type="tel" class="input" id="field-phone" value="${escapeHtml(defaults.phone)}" placeholder="选填" inputmode="tel" />
         </div>
 
         <div class="form-group">
-          <label>会员卡号</label>
+          <label>卡号（选填）</label>
           <input type="text" class="input" id="field-cardNo" value="${escapeHtml(defaults.cardNo)}" placeholder="选填" />
         </div>
 
@@ -79,8 +80,8 @@ export async function renderMemberForm(memberId) {
         </div>
 
         <div class="form-group" id="form-count-section"${defaults.cardType === 'count' ? '' : ' style="display:none"'}>
-          <label>总次数</label>
-          <input type="number" class="input" id="field-totalCount" value="${defaults.totalCount || 10}" min="1" />
+          <label>总次数 *</label>
+          <input type="number" class="input" id="field-totalCount" value="${defaults.totalCount || 10}" min="1" inputmode="numeric" />
           <div class="form-hint">签到自动扣除</div>
         </div>
 
@@ -92,12 +93,12 @@ export async function renderMemberForm(memberId) {
         <div class="form-group" id="form-expiry-section"${defaults.cardType !== 'count' ? '' : ' style="display:none"'}>
           <label>到期日期</label>
           <input type="date" class="input" id="field-expiryDate" value="${defaults.expiryDate || ''}" />
-          <div class="form-hint">不填则自动计算</div>
+          <div class="form-hint">不填则自动按卡类型计算</div>
         </div>
 
         <div class="form-group">
-          <label>备注</label>
-          <textarea class="input" id="field-notes" placeholder="老会员 / 特殊 / 家属…">${escapeHtml(defaults.notes)}</textarea>
+          <label>备注（选填）</label>
+          <textarea class="input" id="field-notes" placeholder="老会员 / 家属…">${escapeHtml(defaults.notes)}</textarea>
         </div>
 
         <div class="form-group">
@@ -195,12 +196,14 @@ export async function renderMemberForm(memberId) {
       data.id = member.id;
       data.createdAt = member.createdAt;
       await updateMember(data);
+      await attemptAutoBackup({ silent: true });
       showToast('保存成功');
       navigate('/members/' + encodeURIComponent(member.id));
     } else {
       data.id = generateId();
       data.createdAt = new Date().toISOString();
       await addMember(data);
+      await attemptAutoBackup({ silent: true });
       showToast('创建成功');
       navigate('/members/' + encodeURIComponent(data.id));
     }

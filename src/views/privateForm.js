@@ -7,6 +7,7 @@ import {
 } from '../db.js';
 import { navigate } from '../router.js';
 import { escapeHtml, showToast, getLocalDateString } from '../utils.js';
+import { attemptAutoBackup } from '../backup.js';
 
 export async function renderPrivateForm(courseId) {
   const isEdit = !!courseId;
@@ -21,7 +22,7 @@ export async function renderPrivateForm(courseId) {
     coachName: course ? (course.coachName || '') : '',
     totalLessons: course ? (course.totalLessons || 20) : 20,
     remainingLessons: course ? (course.remainingLessons || course.totalLessons || 20) : 20,
-    startDate: course ? (course.startDate || '') : getLocalDateString(),
+    startDate: course ? (course.startDate || '') : '',
     notes: course ? (course.notes || '') : '',
   };
 
@@ -45,23 +46,23 @@ export async function renderPrivateForm(courseId) {
           </select>
         </div>
         <div class="form-group">
-          <label>教练姓名</label>
-          <input type="text" class="input" id="field-coachName" value="${escapeHtml(defaults.coachName)}" placeholder="如：张教练" />
+          <label>总课时 *</label>
+          <input type="number" class="input" id="field-totalLessons" value="${defaults.totalLessons}" min="1" inputmode="numeric" />
         </div>
         <div class="form-group">
-          <label>课程名称</label>
-          <input type="text" class="input" id="field-packageName" value="${escapeHtml(defaults.packageName || '私教课')}" placeholder="如：增肌私教" />
+          <label>课程名称（选填）</label>
+          <input type="text" class="input" id="field-packageName" value="${escapeHtml(defaults.packageName)}" placeholder="如：增肌私教" />
         </div>
         <div class="form-group">
-          <label>总课时</label>
-          <input type="number" class="input" id="field-totalLessons" value="${defaults.totalLessons}" min="1" />
+          <label>教练姓名（选填）</label>
+          <input type="text" class="input" id="field-coachName" value="${escapeHtml(defaults.coachName)}" placeholder="选填" />
         </div>
         <div class="form-group">
-          <label>开始日期</label>
-          <input type="date" class="input" id="field-startDate" value="${defaults.startDate}" />
+          <label>开始日期（选填）</label>
+          <input type="date" class="input" id="field-startDate" value="${defaults.startDate || ''}" />
         </div>
         <div class="form-group">
-          <label>备注</label>
+          <label>备注（选填）</label>
           <textarea class="input" id="field-notes" placeholder="选填">${escapeHtml(defaults.notes)}</textarea>
         </div>
       </div>
@@ -80,7 +81,7 @@ export async function renderPrivateForm(courseId) {
 
     const data = {
       memberId,
-      packageName: app.querySelector('#field-packageName').value.trim() || '私教课',
+      packageName: app.querySelector('#field-packageName').value.trim() || '',
       coachName: app.querySelector('#field-coachName').value.trim(),
       totalLessons: parseInt(app.querySelector('#field-totalLessons').value) || 20,
       startDate: app.querySelector('#field-startDate').value || getLocalDateString(),
@@ -93,6 +94,7 @@ export async function renderPrivateForm(courseId) {
       data.remainingLessons = course.remainingLessons;
       data.createdAt = course.createdAt;
       await updateCourse(data);
+      await attemptAutoBackup({ silent: true });
       showToast('保存成功');
       navigate('/training/' + encodeURIComponent(course.id));
     } else {
@@ -100,6 +102,7 @@ export async function renderPrivateForm(courseId) {
       data.id = generateCourseId();
       data.createdAt = new Date().toISOString();
       await addCourse(data);
+      await attemptAutoBackup({ silent: true });
       showToast('创建成功');
       navigate('/training/' + encodeURIComponent(data.id));
     }

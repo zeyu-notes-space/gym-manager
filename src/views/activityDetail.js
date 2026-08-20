@@ -20,6 +20,7 @@ import {
   promptInput,
   picker,
 } from '../utils.js';
+import { attemptAutoBackup } from '../backup.js';
 
 export async function renderActivityDetail(activityId) {
   const activity = await getActivity(activityId);
@@ -100,6 +101,7 @@ export async function renderActivityDetail(activityId) {
       const ok = await showConfirm('移除此参与人？');
       if (ok) {
         await deleteParticipant(el.dataset.participantId);
+        await attemptAutoBackup({ silent: true });
         showToast('已移除');
         renderActivityDetail(activityId);
       }
@@ -155,6 +157,7 @@ async function handleAddParticipant(activity) {
     });
   }
 
+  await attemptAutoBackup({ silent: true });
   showToast('添加成功');
   renderActivityDetail(activity.id);
 }
@@ -165,6 +168,7 @@ async function handleDeleteActivity(activity) {
 
   await deleteParticipantsByActivity(activity.id);
   await deleteActivity(activity.id);
+  await attemptAutoBackup({ silent: true });
   showToast('已删除');
   navigate('/activities');
 }

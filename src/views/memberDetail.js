@@ -23,6 +23,7 @@ import {
   promptInput,
   getLocalDateString,
 } from '../utils.js';
+import { attemptAutoBackup } from '../backup.js';
 
 let _checkinLock = false;
 
@@ -216,6 +217,7 @@ async function handleCheckin(member) {
       await updateMember(member);
     }
 
+    await attemptAutoBackup({ silent: true });
     showToast('签到成功');
     renderMemberDetail(member.id);
   } finally {
@@ -249,6 +251,7 @@ async function handleUndo(member) {
     timestamp: new Date().toISOString(),
   });
 
+  await attemptAutoBackup({ silent: true });
   showToast('已撤销');
   renderMemberDetail(member.id);
 }
@@ -337,6 +340,7 @@ async function showRenewDialog(member) {
     member.updatedAt = new Date().toISOString();
     await updateMember(member);
 
+    await attemptAutoBackup({ silent: true });
     overlay.classList.remove('show');
     setTimeout(() => overlay.remove(), 200);
     showToast('续卡成功');
@@ -346,15 +350,12 @@ async function showRenewDialog(member) {
 
 async function handleDelete(member) {
   const ok = await showConfirm(
-    `确认删除 ${escapeHtml(member.name)}？该会员的签到记录也会被删除。`
+    `确认禁用 ${escapeHtml(member.name)}？该会员将不再显示在列表中。`
   );
   if (!ok) return;
 
-  const checkins = await getCheckinsByMember(member.id);
-  for (const c of checkins) {
-    await deleteCheckin(c.id);
-  }
-  await deleteMember(member.id);
-  showToast('已删除');
+  await updateMember({ ...member, membershipEnabled: false, updatedAt: new Date().toISOString() });
+  await attemptAutoBackup({ silent: true });
+  showToast('已禁用');
   navigate('/members');
 }

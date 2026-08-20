@@ -6,6 +6,7 @@ import {
 } from '../db.js';
 import { navigate } from '../router.js';
 import { escapeHtml, showToast, getCategoryLabel, getDefaultExpiry, getLocalDateString } from '../utils.js';
+import { attemptAutoBackup } from '../backup.js';
 
 export async function renderActivityForm(activityId) {
   const isEdit = !!activityId;
@@ -15,7 +16,7 @@ export async function renderActivityForm(activityId) {
 
   let defaults = {
     title: '',
-    category: '儿童',
+    category: '',
     startDate: '',
     startTime: '',
     endTime: '',
@@ -26,7 +27,7 @@ export async function renderActivityForm(activityId) {
   if (activity) {
     defaults = {
       title: activity.title || '',
-      category: activity.category || '儿童',
+      category: activity.category || '',
       startDate: activity.startDate || '',
       startTime: activity.startTime || '',
       endTime: activity.endTime || '',
@@ -36,8 +37,6 @@ export async function renderActivityForm(activityId) {
   }
 
   const today = getLocalDateString();
-
-  const categories = ['儿童', '体验', '社区', '临时'];
 
   app.innerHTML = `
     <div class="form-view">
@@ -54,26 +53,26 @@ export async function renderActivityForm(activityId) {
         </div>
 
         <div class="form-group">
-          <label>类型</label>
+          <label>类型（选填）</label>
           <select class="input" id="field-category">
-            ${categories.map(c => `
+            <option value="" ${defaults.category === '' ? 'selected' : ''}>请选择</option>
+            ${['儿童', '体验', '社区', '临时'].map(c => `
               <option value="${c}" ${c === defaults.category ? 'selected' : ''}>${getCategoryLabel(c)}</option>
             `).join('')}
           </select>
         </div>
 
         <div class="form-group">
-          <label>日期</label>
+          <label>日期 *</label>
           <input type="date" class="input" id="field-startDate" value="${defaults.startDate || today}" />
         </div>
 
         <div class="form-group">
-          <label>开始时间</label>
-          <input type="time" class="input" id="field-startTime" value="${defaults.startTime || '10:00'}" />
-        </div>
+          <label>开始时间（选填）</label>
+          <input type="time" class="input" id="field-startTime" value="${defaults.startTime || ''}" />
 
         <div class="form-group">
-          <label>结束时间</label>
+          <label>结束时间（选填）</label>
           <input type="time" class="input" id="field-endTime" value="${defaults.endTime || ''}" />
         </div>
 
@@ -124,12 +123,14 @@ export async function renderActivityForm(activityId) {
       data.id = activity.id;
       data.createdAt = activity.createdAt;
       await updateActivity(data);
+      await attemptAutoBackup({ silent: true });
       showToast('保存成功');
       navigate('/activities/' + encodeURIComponent(activity.id));
     } else {
       data.id = generateActivityId();
       data.createdAt = new Date().toISOString();
       await addActivity(data);
+      await attemptAutoBackup({ silent: true });
       showToast('创建成功');
       navigate('/activities/' + encodeURIComponent(data.id));
     }

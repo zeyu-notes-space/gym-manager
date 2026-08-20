@@ -1,175 +1,131 @@
-import {
-  getMemberCount,
-  getCourseCount,
-  getActivityCount,
-  exportAllData,
-  importAllData,
-  clearAllData,
-  seedDemoData,
-} from '../db.js';
+import { getMemberCount, getCourseCount, getActivityCount, clearAllData, seedDemoData } from '../db.js';
 import { navigate } from '../router.js';
-import { showToast, showConfirm, formatDateTime, getLocalDateString } from '../utils.js';
+import { showToast, showConfirm, getLocalDateString } from '../utils.js';
 import { APP_NAME, APP_VERSION, BUILD_ID } from '../config.js';
+import { getBackupStatus, hasPendingBackup, manualBackup, restoreFromBackup } from '../backup.js';
 
 export async function renderSettings() {
   const app = document.getElementById('app');
-  const memberCount = await getMemberCount();
-  const courseCount = await getCourseCount();
-  const activityCount = await getActivityCount();
+  const [memberCount, courseCount, activityCount] = await Promise.all([
+    getMemberCount(),
+    getCourseCount(),
+    getActivityCount(),
+  ]);
+  const backupStatus = getBackupStatus();
+  const pending = hasPendingBackup();
+
+  const lastBackupDisplay = backupStatus.lastBackupTime
+    ? formatBackupTime(backupStatus.lastBackupTime)
+    : '从未备份';
 
   app.innerHTML = `
     <div class="settings-view">
       <div class="top-bar">
         <button class="btn-icon" onclick="window.__back()">‹</button>
         <h1>设置</h1>
-        <div style="width:36px"></div>
+        <div style="width:44px"></div>
       </div>
 
-      <div style="padding:20px 16px 8px">
-        <div style="font-size:22px;font-weight:700">${APP_NAME}</div>
-        <div style="font-size:13px;color:var(--text-muted);margin-top:2px">v${APP_VERSION} · build ${BUILD_ID}</div>
-      </div>
+      <div class="detail-body">
+        <div class="detail-card" style="margin-bottom:16px">
+          <h3>${APP_NAME}</h3>
+          <div class="info-row"><span class="label">版本</span><span class="value">v${APP_VERSION}</span></div>
+          <div class="info-row"><span class="label">Build</span><span class="value">${BUILD_ID}</span></div>
+          <div class="info-row" style="padding:10px 0 0;color:var(--text-muted);font-size:12px;border:none">
+            数据保存在当前手机中，正常退出或重启不会影响。系统会尽可能生成本机备份文件，用于应用数据异常时恢复。如果手机遗失、损坏、恢复出厂设置或备份文件被删除，本工具无法恢复已不存在的数据。
+          </div>
+        </div>
 
-      <div class="settings-section">
-        <h3>数据概览</h3>
-        <div class="settings-item" style="cursor:default">
-          <div class="settings-left">
-            <span class="settings-icon">👥</span>
-            <span class="settings-label">会员</span>
-          </div>
-          <span class="settings-value">${memberCount} 人</span>
+        <div class="detail-card">
+          <h3>数据概览</h3>
+          <div class="info-row"><span class="label">会员</span><span class="value">${memberCount} 人</span></div>
+          <div class="info-row"><span class="label">私教课包</span><span class="value">${courseCount} 个</span></div>
+          <div class="info-row"><span class="label">活动</span><span class="value">${activityCount} 个</span></div>
         </div>
-        <div class="settings-item" style="cursor:default">
-          <div class="settings-left">
-            <span class="settings-icon">🏋️</span>
-            <span class="settings-label">私教课包</span>
-          </div>
-          <span class="settings-value">${courseCount} 个</span>
-        </div>
-        <div class="settings-item" style="cursor:default">
-          <div class="settings-left">
-            <span class="settings-icon">📋</span>
-            <span class="settings-label">活动</span>
-          </div>
-          <span class="settings-value">${activityCount} 个</span>
-        </div>
-      </div>
 
-      <div class="settings-section">
-        <h3>数据管理</h3>
-        <div class="settings-item" id="btn-export">
-          <div class="settings-left">
-            <span class="settings-icon">📤</span>
-            <span class="settings-label">导出备份</span>
+        <div class="detail-card">
+          <h3>数据备份</h3>
+          <div class="info-row">
+            <span class="label">备份状态</span>
+            <span class="value">${pending ? '有未备份的数据' : '已备份'}</span>
           </div>
-          <span class="settings-value">JSON</span>
-        </div>
-        <div class="settings-item" id="btn-import">
-          <div class="settings-left">
-            <span class="settings-icon">📥</span>
-            <span class="settings-label">导入备份</span>
+          <div class="info-row">
+            <span class="label">上次备份</span>
+            <span class="value">${lastBackupDisplay}</span>
           </div>
-          <span class="settings-value">覆盖现有数据</span>
+          <div style="display:flex;flex-direction:column;gap:8px;padding-top:12px">
+            <button class="btn btn-primary btn-block" id="btn-manual-backup">📤 立即备份</button>
+            <button class="btn btn-secondary btn-block" id="btn-restore">📥 恢复备份</button>
+          </div>
         </div>
-      </div>
 
-      <div class="settings-section">
-        <h3>演示</h3>
-        <div class="settings-item" id="btn-demo">
-          <div class="settings-left">
-            <span class="settings-icon">🧪</span>
-            <span class="settings-label">加载演示数据</span>
+        <div class="detail-card" style="border:1px solid rgba(231,76,60,0.2)">
+          <h3 style="color:var(--danger)">危险操作</h3>
+          <button class="btn btn-danger btn-block" id="btn-clear">清空所有数据</button>
+          <div style="margin-top:8px;font-size:12px;color:var(--text-muted);line-height:1.5">
+            此操作不可恢复。请确保已导出备份文件。
           </div>
-          <span class="settings-value">${memberCount > 0 ? '已有数据' : ''}</span>
         </div>
-      </div>
-
-      <div class="settings-section">
-        <h3 style="color:var(--danger)">危险操作</h3>
-        <div class="settings-item danger" id="btn-clear">
-          <div class="settings-left">
-            <span class="settings-icon">⚠️</span>
-            <span class="settings-label">清空所有数据</span>
-          </div>
-          <span class="settings-value">不可恢复</span>
-        </div>
-      </div>
-
-      <div class="settings-footer">
-        ⚠️ 所有数据保存在当前设备本地 (IndexedDB)
-      </div>
-      <div class="settings-footer" style="padding-top:0">
-        清除浏览器数据会丢失 · 请定期导出备份
       </div>
     </div>
   `;
 
-  document.getElementById('btn-export').onclick = handleExport;
-  document.getElementById('btn-import').onclick = handleImport;
-  document.getElementById('btn-demo').onclick = handleLoadDemo;
-  document.getElementById('btn-clear').onclick = handleClear;
-}
-
-async function handleExport() {
-  try {
-    const backup = await exportAllData();
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `oxy-fitness-backup-${getLocalDateString()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('导出成功');
-  } catch (e) {
-    showToast('导出失败: ' + e.message);
-  }
-}
-
-async function handleImport() {
-  const ok = await showConfirm('导入备份会覆盖当前所有数据，确认继续？');
-  if (!ok) return;
-
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.json';
-
-  input.onchange = async () => {
-    const file = input.files[0];
-    if (!file) return;
-
+  document.getElementById('btn-manual-backup').onclick = async () => {
     try {
-      const text = await file.text();
-      const backup = JSON.parse(text);
-      await importAllData(backup);
-      showToast('导入成功');
-      navigate('/');
+      await manualBackup();
+      renderSettings();
     } catch (e) {
-      showToast('导入失败: ' + e.message);
+      showToast('备份失败: ' + e.message);
     }
   };
 
-  input.click();
+  document.getElementById('btn-restore').onclick = async () => {
+    const ok = await showConfirm('恢复备份会用备份文件覆盖当前所有数据。确认继续？');
+    if (!ok) return;
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+
+      try {
+        await restoreFromBackup(file);
+        showToast('恢复成功');
+        navigate('/');
+      } catch (e) {
+        showToast('恢复失败: ' + e.message);
+      }
+    };
+
+    input.click();
+  };
+
+  document.getElementById('btn-clear').onclick = async () => {
+    const ok1 = await showConfirm('确定清空所有数据？此操作不可恢复。');
+    if (!ok1) return;
+
+    const ok2 = await showConfirm('再次确认：所有会员、签到、私教、活动数据都会被删除。');
+    if (!ok2) return;
+
+    await clearAllData();
+    showToast('已清空');
+    navigate('/');
+  };
 }
 
-async function handleLoadDemo() {
-  const ok = await showConfirm('加载演示数据？已有数据会被清空。');
-  if (!ok) return;
-
-  await clearAllData();
-  await seedDemoData();
-  showToast('演示数据已加载');
-  navigate('/');
-}
-
-async function handleClear() {
-  const ok1 = await showConfirm('确定清空所有数据？此操作不可恢复。');
-  if (!ok1) return;
-
-  const ok2 = await showConfirm('再次确认：所有会员、签到、私教、活动数据都会被删除。');
-  if (!ok2) return;
-
-  await clearAllData();
-  showToast('已清空');
-  navigate('/');
+function formatBackupTime(isoString) {
+  if (!isoString) return '从未备份';
+  try {
+    const d = new Date(isoString);
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + month + '-' + day + ' ' + h + ':' + m;
+  } catch {
+    return isoString;
+  }
 }

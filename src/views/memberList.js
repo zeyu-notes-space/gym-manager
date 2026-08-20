@@ -92,21 +92,21 @@ function renderMemberItems(members) {
     const label = getCardTypeLabel(m.cardType);
     let subtitle = label || '仅私教';
     let meta = '';
-    let metaSub = '';
 
     if (m.cardType === 'count') {
-      meta = m.remainingCount;
-      metaSub = `/ ${m.totalCount}`;
+      meta = `剩余 ${m.remainingCount} / ${m.totalCount} 次`;
     } else if (m.cardType === 'month' || m.cardType === 'year') {
       const days = getDaysRemaining(m.expiryDate);
-      if (days !== null && days >= 0) {
-        meta = `${days}天`;
-        metaSub = '剩余';
+      if (days !== null && days > 0) {
+        meta = `剩余 ${days} 天`;
+      } else if (days === 0) {
+        meta = '今日到期';
       } else if (days !== null) {
         meta = '已过期';
-        metaSub = '';
       }
     }
+
+    const metaClass = (meta === '已过期') ? 'expired' : '';
 
     return `
       <div class="list-item" data-id="${escapeHtml(m.id)}">
@@ -116,8 +116,7 @@ function renderMemberItems(members) {
           <div class="item-subtitle">${escapeHtml(subtitle)}${m.cardNo ? ` · ${escapeHtml(m.cardNo)}` : ''}</div>
         </div>
         <div class="list-item-meta">
-          ${meta ? `<div class="meta-primary">${meta}</div>` : ''}
-          ${metaSub ? `<div class="meta-secondary">${metaSub}</div>` : ''}
+          <div class="meta-primary ${metaClass}">${meta || ''}</div>
         </div>
       </div>
     `;

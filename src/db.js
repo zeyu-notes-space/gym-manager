@@ -1,3 +1,5 @@
+import { APP_NAME, APP_VERSION, BUILD_ID } from './config.js';
+
 const DB_NAME = 'gym-manager';
 const DB_VERSION = 2;
 
@@ -615,16 +617,25 @@ export async function exportAllData() {
     });
   }
   return {
-    app: 'oxy-fitness-local',
-    exportVersion: 1,
+    app: APP_NAME,
+    exportVersion: 2,
+    appVersion: APP_VERSION,
+    buildId: BUILD_ID,
+    databaseVersion: DB_VERSION,
     exportedAt: new Date().toISOString(),
+    storeNames,
+    storeCounts: Object.fromEntries(storeNames.map(n => [n, (data[n] || []).length])),
     data,
   };
 }
 
 export async function importAllData(backup) {
-  if (!backup || backup.app !== 'oxy-fitness-local' || !backup.data) {
-    throw new Error('无效的备份文件');
+  if (!backup || !backup.data) {
+    throw new Error('无效的备份文件：缺少数据内容');
+  }
+  // Accept v2 ('OXY FITNESS') and legacy v1 ('oxy-fitness-local') formats
+  if (backup.app !== 'OXY FITNESS' && backup.app !== 'oxy-fitness-local') {
+    throw new Error('无效的备份文件：不是 OXY FITNESS 备份');
   }
 
   await clearAllData();
