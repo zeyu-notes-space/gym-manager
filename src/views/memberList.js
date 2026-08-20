@@ -3,7 +3,6 @@ import {
   getMemberCount,
   getTodayCheckinCount,
   searchMembers,
-  seedDemoData,
 } from '../db.js';
 import { navigate } from '../router.js';
 import { getDaysRemaining, getCardTypeLabel, escapeHtml } from '../utils.js';
@@ -25,15 +24,10 @@ export async function renderMemberList() {
           <h3>还没有会员</h3>
           <p>添加第一个会员开始使用</p>
           <button class="btn btn-primary" id="btn-first-member">+ 新增会员</button>
-          <button class="btn btn-secondary" id="btn-demo-data" style="margin-top:8px">加载演示数据</button>
         </div>
       </div>
     `;
     document.getElementById('btn-first-member').onclick = () => navigate('/members/new');
-    document.getElementById('btn-demo-data').onclick = async () => {
-      await seedDemoData();
-      renderMemberList();
-    };
     return;
   }
 
